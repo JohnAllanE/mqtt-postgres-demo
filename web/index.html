@@ -4,11 +4,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MQTT Postgres Demo</title>
+    <link rel="stylesheet" href="/web/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
     <main>
-      <h1>MQTT Postgres Demo</h1>
-      <p>Phase 1 scaffold complete. UI implementation starts in Phase 2.</p>
+      <section class="panel">
+        <h1>MQTT Postgres Demo - Phase 2</h1>
+        <p>Global telemetry from the gateway is stored in PostgreSQL and plotted here.</p>
+
+        <div class="controls">
+          <label for="sensorId">Sensor ID</label>
+          <input id="sensorId" value="ac-1" />
+          <button id="loadBtn" type="button">Load Readings</button>
+        </div>
+
+        <div id="status">Waiting for data...</div>
+
+        <div class="chart-wrap">
+          <canvas id="sensorChart"></canvas>
+        </div>
+      </section>
     </main>
+    <script src="/web/app.js"></script>
   </body>
 </html>

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
 
+    server_host: str = "0.0.0.0"
+    server_port: int = 8000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -29,6 +32,13 @@ class Settings(BaseSettings):
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def gateway_telemetry_global_topic(self) -> str:
+        return (
+            f"{self.mqtt_topic_prefix}/gateway/"
+            f"{self.mqtt_client_id_gateway}/telemetry/global"
         )
 
 

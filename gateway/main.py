@@ -1,5 +1,7 @@
 import json
 import logging
+import math
+import time
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
@@ -11,9 +13,15 @@ logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.I
 logger = logging.getLogger("gateway")
 
 
+SEQ = 0
+
+
 def _status_topic() -> str:
-    gateway_id = settings.mqtt_client_id_gateway
-    return f"{settings.mqtt_topic_prefix}/gateway/{gateway_id}/status"
+    return settings.status_topic
+
+
+def _telemetry_topic() -> str:
+    return settings.telemetry_global_topic
 
 
 def _status_payload() -> dict:
@@ -64,6 +72,36 @@ def _status_payload() -> dict:
     }
 
 
+def _next_ac_values(now_epoch: float) -> list[float]:
+    condenser = 72.0 + 4.0 * math.sin(now_epoch / 8.0)
+    evaporator = 55.0 + 2.5 * math.sin(now_epoch / 7.5 + 0.8)
+    high_side = 180.0 + 12.0 * math.sin(now_epoch / 12.0)
+    low_side = 30.0 + 5.0 * math.sin(now_epoch / 10.0 + 1.2)
+    return [round(condenser, 3), round(evaporator, 3), round(high_side, 3), round(low_side, 3)]
+
+
+def _telemetry_payload() -> dict:
+    global SEQ
+    now = datetime.now(timezone.utc)
+    SEQ += 1
+
+    return {
+        "msg_type": "telemetry",
+        "stream": "global",
+        "gateway_id": settings.mqtt_client_id_gateway,
+        "sent_ts": now.isoformat(),
+        "samples": [
+            {
+                "sensor_id": "ac-1",
+                "type_id": "ac_unit_v1",
+                "sample_ts": now.isoformat(),
+                "values": _next_ac_values(now.timestamp()),
+                "seq": SEQ,
+            }
+        ],
+    }
+
+
 def on_connect(client: mqtt.Client, _: object, __: object, rc: int, ___: object = None) -> None:
     if rc != 0:
         logger.error("Gateway failed to connect to MQTT broker with rc=%s", rc)
@@ -91,7 +129,23 @@ def main() -> None:
         settings.mqtt_broker_port,
     )
     client.connect(settings.mqtt_broker_host, settings.mqtt_broker_port, keepalive=60)
-    client.loop_forever()
+    client.loop_start()
+
+    interval_s = 1.0 / max(settings.global_default_freq_hz, 0.1)
+    logger.info("Publishing global telemetry to topic=%s at %.3f Hz", _telemetry_topic(), settings.global_default_freq_hz)
+
+    try:
+        while True:
+            payload = json.dumps(_telemetry_payload())
+            info = client.publish(_telemetry_topic(), payload=payload, qos=0, retain=False)
+            if info.rc != mqtt.MQTT_ERR_SUCCESS:
+                logger.warning("Global telemetry publish returned rc=%s", info.rc)
+            time.sleep(interval_s)
+    except KeyboardInterrupt:
+        logger.info("Gateway interrupted, shutting down")
+    finally:
+        client.loop_stop()
+        client.disconnect()
 
 
 if __name__ == "__main__":

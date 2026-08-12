@@ -793,7 +793,7 @@ Use this plan to track build progress phase by phase.
 
 ### Phase 1: Foundation and bootstrapping
 
-Status: [ ] Not started [x] In progress [ ] Complete
+Status: [ ] Not started [ ] In progress [x] Complete
 
 Tasks:
 
@@ -801,28 +801,28 @@ Tasks:
 2. [x] Add PostgreSQL schema initialization and seed routines.
 3. [x] Add FastAPI app skeleton and `GET /api/v1/health`.
 4. [x] Add gateway skeleton with MQTT connect and initial status publish.
-5. [ ] Verify local startup for broker, database, server, and gateway.
+5. [x] Verify local startup for broker, database, server, and gateway.
 
 Exit criteria:
 
-1. [ ] All services start without manual code edits.
-2. [ ] Health endpoint reports database and MQTT dependency states.
+1. [x] All services start without manual code edits.
+2. [x] Health endpoint reports database and MQTT dependency states.
 
 ### Phase 2: Vertical slice v0 (single telemetry path)
 
-Status: [ ] Not started [ ] In progress [ ] Complete
+Status: [ ] Not started [ ] In progress [x] Complete
 
 Tasks:
 
-1. [ ] Implement one global telemetry publish path from gateway to broker.
-2. [ ] Implement server MQTT ingest and database insert for global samples.
-3. [ ] Implement `GET /api/v1/readings` for one sensor.
-4. [ ] Add minimal web page with one chart querying historical readings.
+1. [x] Implement one global telemetry publish path from gateway to broker.
+2. [x] Implement server MQTT ingest and database insert for global samples.
+3. [x] Implement `GET /api/v1/readings` for one sensor.
+4. [x] Add minimal web page with one chart querying historical readings.
 
 Exit criteria:
 
-1. [ ] Reading rows grow in PostgreSQL from simulated gateway data.
-2. [ ] Chart shows stored data retrieved through server API.
+1. [x] Reading rows grow in PostgreSQL from simulated gateway data.
+2. [x] Chart shows stored data retrieved through server API.
 
 ### Phase 3: Full command and status contracts
 
@@ -884,6 +884,10 @@ Record concise updates as work proceeds.
    1. Completed: Phase 1 scaffolding files, server health endpoint, gateway MQTT status publisher, DB schema and seed routines.
    2. Notes: Python modules compile cleanly with `py_compile`.
    3. Blockers: `docker` command is unavailable in this environment, so broker/database startup verification remains pending.
+3. Date: 2026-08-12
+   1. Completed: Docker context fix, runtime startup verification, Phase 2 telemetry publisher/ingestor, `/api/v1/readings`, and minimal chart UI.
+   2. Notes: `curl /api/v1/health` reports both dependencies true, and `curl /api/v1/readings?sensor_id=ac-1` returns persisted rows.
+   3. Blockers: None for Phase 1 and Phase 2.
 
 ## 22. Future extension points
 
