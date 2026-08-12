@@ -793,14 +793,14 @@ Use this plan to track build progress phase by phase.
 
 ### Phase 1: Foundation and bootstrapping
 
-Status: [ ] Not started [ ] In progress [ ] Complete
+Status: [ ] Not started [x] In progress [ ] Complete
 
 Tasks:
 
-1. [ ] Create project structure and base files (`requirements.txt`, `.env.example`, `docker-compose.yml`).
-2. [ ] Add PostgreSQL schema initialization and seed routines.
-3. [ ] Add FastAPI app skeleton and `GET /api/v1/health`.
-4. [ ] Add gateway skeleton with MQTT connect and initial status publish.
+1. [x] Create project structure and base files (`requirements.txt`, `.env.example`, `docker-compose.yml`).
+2. [x] Add PostgreSQL schema initialization and seed routines.
+3. [x] Add FastAPI app skeleton and `GET /api/v1/health`.
+4. [x] Add gateway skeleton with MQTT connect and initial status publish.
 5. [ ] Verify local startup for broker, database, server, and gateway.
 
 Exit criteria:
@@ -880,6 +880,10 @@ Record concise updates as work proceeds.
    1. Completed:
    2. Notes:
    3. Blockers:
+2. Date: 2026-08-12
+   1. Completed: Phase 1 scaffolding files, server health endpoint, gateway MQTT status publisher, DB schema and seed routines.
+   2. Notes: Python modules compile cleanly with `py_compile`.
+   3. Blockers: `docker` command is unavailable in this environment, so broker/database startup verification remains pending.
 
 ## 22. Future extension points
 
