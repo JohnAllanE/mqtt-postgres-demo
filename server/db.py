@@ -69,7 +69,10 @@ class Database:
         """
 
         async with self.pool.acquire() as conn:
-            result = await conn.execute(query, sensor_id, type_id, sample_ts, values, seq)
+            try:
+                result = await conn.execute(query, sensor_id, type_id, sample_ts, values, seq)
+            except asyncpg.UniqueViolationError:
+                return False
         return result == "INSERT 0 1"
 
     async def get_readings(
@@ -88,20 +91,57 @@ class Database:
         where sensor_id = $1
           and ($2::timestamptz is null or sample_ts >= $2::timestamptz)
           and ($3::timestamptz is null or sample_ts <= $3::timestamptz)
-        order by sample_ts asc
+                order by sample_ts desc
         limit $4
         """
 
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, sensor_id, from_ts, to_ts, limit)
 
-        return [
+        results = [
             {
                 "sensor_id": row["sensor_id"],
                 "type_id": row["type_id"],
                 "sample_ts": row["sample_ts"].isoformat(),
                 "values": row["values"],
                 "seq": row["seq"],
+            }
+            for row in rows
+        ]
+        results.reverse()
+        return results
+
+    async def get_sensors(self) -> list[dict[str, Any]]:
+        if self.pool is None:
+            raise RuntimeError("Database pool is not connected")
+
+        query = """
+        select
+          sr.sensor_id,
+          sr.display_name,
+          sr.location,
+          sr.active,
+          sr.type_id,
+          st.field_names,
+          st.field_units,
+          st.value_count
+        from sensor_registry sr
+        join sensor_type_schema st on st.type_id = sr.type_id
+        order by sr.sensor_id asc
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query)
+
+        return [
+            {
+                "sensor_id": row["sensor_id"],
+                "display_name": row["display_name"],
+                "location": row["location"],
+                "active": row["active"],
+                "type_id": row["type_id"],
+                "field_names": row["field_names"],
+                "field_units": row["field_units"],
+                "value_count": row["value_count"],
             }
             for row in rows
         ]

@@ -41,5 +41,24 @@ class Settings(BaseSettings):
             f"{self.mqtt_client_id_gateway}/telemetry/global"
         )
 
+    @property
+    def gateway_telemetry_monitor_topic(self) -> str:
+        return (
+            f"{self.mqtt_topic_prefix}/gateway/"
+            f"{self.mqtt_client_id_gateway}/telemetry/monitor"
+        )
+
+    @property
+    def gateway_status_topic(self) -> str:
+        return f"{self.mqtt_topic_prefix}/gateway/{self.mqtt_client_id_gateway}/status"
+
+    @property
+    def gateway_cmd_topic(self) -> str:
+        return f"{self.mqtt_topic_prefix}/gateway/{self.mqtt_client_id_gateway}/cmd"
+
+    @property
+    def gateway_cmd_ack_topic(self) -> str:
+        return f"{self.mqtt_topic_prefix}/gateway/{self.mqtt_client_id_gateway}/cmd_ack"
+
 
 settings = Settings()

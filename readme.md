@@ -684,6 +684,42 @@ RETENTION_CLEANUP_INTERVAL_SECONDS=60
 
 ## 18. Local run plan
 
+### 18.0 Quick Start (recommended)
+
+Use these commands to start infrastructure, server, gateway, and open the web GUI.
+
+```bash
+cd "/Users/jare/Documents/AMP projects/Noah/mqtt-postgres-demo"
+docker context use default
+docker compose up -d
+
+.venv/bin/python -m server.main
+```
+
+In a second terminal:
+
+```bash
+cd "/Users/jare/Documents/AMP projects/Noah/mqtt-postgres-demo"
+.venv/bin/python -m gateway.main
+```
+
+Open the GUI:
+
+1. `http://localhost:8000`
+
+Quick checks:
+
+```bash
+curl -sS http://localhost:8000/api/v1/health
+curl -sS "http://localhost:8000/api/v1/readings?sensor_id=ac-1&limit=5"
+```
+
+Stop everything:
+
+```bash
+docker compose down
+```
+
 ### 18.1 Start dependencies
 
 Use Docker compose for broker and PostgreSQL:
@@ -826,19 +862,19 @@ Exit criteria:
 
 ### Phase 3: Full command and status contracts
 
-Status: [ ] Not started [ ] In progress [ ] Complete
+Status: [ ] Not started [ ] In progress [x] Complete
 
 Tasks:
 
-1. [ ] Implement command handlers for global config, monitor config, retention, status request, and reset.
-2. [ ] Implement command acknowledgement flow (`cmd_ack`).
-3. [ ] Implement status snapshot publication and server cache updates.
-4. [ ] Implement WebSocket endpoint and events (`status_update`, `monitor_samples`, `command_ack`, `connection_update`).
+1. [x] Implement command handlers for global config, monitor config, retention, status request, and reset.
+2. [x] Implement command acknowledgement flow (`cmd_ack`).
+3. [x] Implement status snapshot publication and server cache updates.
+4. [x] Implement WebSocket endpoint and events (`status_update`, `monitor_samples`, `command_ack`, `connection_update`).
 
 Exit criteria:
 
-1. [ ] UI can send commands and receive async acknowledgement updates.
-2. [ ] Status panel reflects gateway changes from command activity.
+1. [x] UI can send commands and receive async acknowledgement updates.
+2. [x] Status panel reflects gateway changes from command activity.
 
 ### Phase 4: Thermostat setpoint end-to-end
 
@@ -888,6 +924,10 @@ Record concise updates as work proceeds.
    1. Completed: Docker context fix, runtime startup verification, Phase 2 telemetry publisher/ingestor, `/api/v1/readings`, and minimal chart UI.
    2. Notes: `curl /api/v1/health` reports both dependencies true, and `curl /api/v1/readings?sensor_id=ac-1` returns persisted rows.
    3. Blockers: None for Phase 1 and Phase 2.
+4. Date: 2026-08-12
+   1. Completed: Phase 3 command endpoints, gateway command handling, status/ack topic flow, websocket events, and UI controls.
+   2. Notes: Verified `GET /api/v1/status`, command POST endpoints, and websocket connection event using a Python `websockets` client.
+   3. Blockers: None for Phase 3.
 
 ## 22. Future extension points
 

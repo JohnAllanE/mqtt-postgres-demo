@@ -1,23 +1,66 @@
 import asyncio
+import json
 import logging
 import socket
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from server.config import settings
 from server.db import db
-from server.mqtt_client import ingestor
+from server.mqtt_client import bridge
 
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger("server")
+
+
+class WsHub:
+    def __init__(self) -> None:
+        self._connections: set[WebSocket] = set()
+        self._lock = asyncio.Lock()
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        async with self._lock:
+            self._connections.add(ws)
+
+    async def disconnect(self, ws: WebSocket) -> None:
+        async with self._lock:
+            if ws in self._connections:
+                self._connections.remove(ws)
+
+    async def broadcast(self, event: str, data: dict[str, Any]) -> None:
+        envelope = {
+            "event": event,
+            "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "data": data,
+        }
+        dead: list[WebSocket] = []
+        async with self._lock:
+            for ws in self._connections:
+                try:
+                    await ws.send_json(envelope)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                self._connections.remove(ws)
+
+
+ws_hub = WsHub()
+
+STATE: dict[str, Any] = {
+    "gateway_status": {},
+    "last_command_ack": {},
+    "mqtt_connection": {"connected": False, "reason": "not-started"},
+}
 
 
 async def _mqtt_tcp_probe(host: str, port: int, timeout_s: float = 1.0) -> bool:
@@ -35,22 +78,66 @@ async def _mqtt_tcp_probe(host: str, port: int, timeout_s: float = 1.0) -> bool:
     return await asyncio.to_thread(_probe)
 
 
+async def _on_status(payload: dict[str, Any]) -> None:
+    STATE["gateway_status"] = payload
+    await ws_hub.broadcast("status_update", payload)
+
+
+async def _on_cmd_ack(payload: dict[str, Any]) -> None:
+    STATE["last_command_ack"] = payload
+    await ws_hub.broadcast("command_ack", payload)
+
+
+async def _on_monitor_samples(payload: dict[str, Any]) -> None:
+    await ws_hub.broadcast("monitor_samples", payload)
+
+
+async def _on_connection(payload: dict[str, Any]) -> None:
+    STATE["mqtt_connection"] = payload
+    await ws_hub.broadcast("connection_update", payload)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.connect()
     await db.init_schema_and_seed()
-    await ingestor.start()
+    bridge.set_event_handlers(_on_status, _on_cmd_ack, _on_monitor_samples, _on_connection)
+    await bridge.start()
     try:
         yield
     finally:
-        await ingestor.stop()
+        await bridge.stop()
         await db.close()
 
 
-app = FastAPI(title="MQTT Postgres Demo Server", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="MQTT Postgres Demo Server", version="0.2.0", lifespan=lifespan)
 
 web_dir = Path(__file__).resolve().parent.parent / "web"
 app.mount("/web", StaticFiles(directory=web_dir), name="web")
+
+
+class GlobalConfigRequest(BaseModel):
+    sensor_ids: list[str] = Field(default_factory=list)
+    freq_hz: float = Field(ge=0.1, le=20.0)
+    batch_window_ms: int = Field(ge=100, le=5000)
+
+
+class MonitorConfigRequest(BaseModel):
+    enabled: bool
+    sensor_ids: list[str] = Field(default_factory=list)
+    freq_hz: float = Field(ge=0.1, le=20.0)
+    batch_window_ms: int = Field(ge=100, le=5000)
+
+
+class RetentionConfigRequest(BaseModel):
+    max_age_seconds: int = Field(gt=0)
+    max_rows_per_sensor: int = Field(gt=0)
+    cleanup_interval_seconds: int = Field(gt=0)
+
+
+class ResetRequest(BaseModel):
+    clear_monitor: bool = True
+    restore_defaults: bool = True
 
 
 @app.get("/")
@@ -71,6 +158,51 @@ async def health() -> dict:
             "mqtt_connected": mqtt_connected,
         },
     }
+
+
+@app.get("/api/v1/status")
+async def status() -> dict:
+    return {
+        "gateway_status": STATE["gateway_status"],
+        "last_command_ack": STATE["last_command_ack"],
+        "mqtt_connection": STATE["mqtt_connection"],
+    }
+
+
+@app.get("/api/v1/sensors")
+async def sensors() -> dict:
+    rows = await db.get_sensors()
+    return {"count": len(rows), "rows": rows}
+
+
+@app.post("/api/v1/sensors/refresh-status")
+async def refresh_status() -> dict:
+    cmd_id = await bridge.publish_command("request_status", {})
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/gateway/config/global")
+async def set_global_config(req: GlobalConfigRequest) -> dict:
+    cmd_id = await bridge.publish_command("set_global_config", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/gateway/config/monitor")
+async def set_monitor_config(req: MonitorConfigRequest) -> dict:
+    cmd_id = await bridge.publish_command("set_monitor_config", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/gateway/config/retention")
+async def set_retention_config(req: RetentionConfigRequest) -> dict:
+    cmd_id = await bridge.publish_command("set_retention_policy", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/gateway/reset")
+async def reset_gateway(req: ResetRequest) -> dict:
+    cmd_id = await bridge.publish_command("reset_gateway_state", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
 
 
 @app.get("/api/v1/readings")
@@ -95,6 +227,28 @@ async def get_readings(
         to_ts=parsed_to,
     )
     return {"sensor_id": sensor_id, "count": len(rows), "rows": rows}
+
+
+@app.websocket("/ws")
+async def ws_endpoint(ws: WebSocket) -> None:
+    await ws_hub.connect(ws)
+    try:
+        await ws.send_json(
+            {
+                "event": "connection_update",
+                "ts": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                "data": STATE["mqtt_connection"],
+            }
+        )
+        while True:
+            # v1 server does not require client WS messages, but keep the socket alive.
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("WebSocket error")
+    finally:
+        await ws_hub.disconnect(ws)
 
 
 def main() -> None:

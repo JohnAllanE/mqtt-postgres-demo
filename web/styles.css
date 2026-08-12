@@ -42,6 +42,11 @@ h1 {
   gap: 10px;
   align-items: center;
   margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+
+.controls-wrap {
+  margin-bottom: 16px;
 }
 
 input, button {
@@ -67,6 +72,52 @@ button:hover {
   margin-bottom: 12px;
 }
 
+.status-line {
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
 .chart-wrap {
   height: 420px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.json-box {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 160px;
+  max-height: 220px;
+  overflow: auto;
+  background: #fafcff;
+  font-size: 12px;
+}
+
+.event-log {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 100px;
+  max-height: 180px;
+  overflow: auto;
+  background: #f8fbff;
+  font-size: 12px;
+}
+
+h2 {
+  margin-top: 18px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 800px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
 }

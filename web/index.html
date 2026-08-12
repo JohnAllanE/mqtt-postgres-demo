@@ -10,20 +10,46 @@
   <body>
     <main>
       <section class="panel">
-        <h1>MQTT Postgres Demo - Phase 2</h1>
-        <p>Global telemetry from the gateway is stored in PostgreSQL and plotted here.</p>
+        <h1>MQTT Postgres Demo - Phase 3</h1>
+        <p>Control gateway settings and view live status/ack events while plotting stored telemetry.</p>
 
+        <h2>Gateway Controls</h2>
+        <div class="controls controls-wrap">
+          <label for="globalFreq">Global Hz</label>
+          <input id="globalFreq" type="number" step="0.1" min="0.1" value="1.0" />
+          <button id="setGlobalBtn" type="button">Set Global Config</button>
+
+          <label for="monitorEnabled">Monitor</label>
+          <input id="monitorEnabled" type="checkbox" />
+          <label for="monitorFreq">Monitor Hz</label>
+          <input id="monitorFreq" type="number" step="0.1" min="0.1" value="10.0" />
+          <button id="setMonitorBtn" type="button">Set Monitor Config</button>
+
+          <button id="refreshStatusBtn" type="button">Request Status</button>
+          <button id="resetBtn" type="button">Reset Gateway</button>
+        </div>
+
+        <div id="commandStatus" class="status-line">No command sent yet.</div>
+
+        <h2>Historical Data</h2>
         <div class="controls">
           <label for="sensorId">Sensor ID</label>
           <input id="sensorId" value="ac-1" />
           <button id="loadBtn" type="button">Load Readings</button>
         </div>
 
-        <div id="status">Waiting for data...</div>
+        <div id="status" class="status-line">Waiting for data...</div>
 
         <div class="chart-wrap">
           <canvas id="sensorChart"></canvas>
         </div>
+
+        <h2>Live Events</h2>
+        <div class="split">
+          <pre id="gatewayStatus" class="json-box">{}</pre>
+          <pre id="lastAck" class="json-box">{}</pre>
+        </div>
+        <div id="eventLog" class="event-log"></div>
       </section>
     </main>
     <script src="/web/app.js"></script>

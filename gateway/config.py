@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     mqtt_broker_port: int = 1883
     mqtt_client_id_gateway: str = "gw-001"
     mqtt_topic_prefix: str = "demo"
+
     global_default_freq_hz: float = 1.0
+    monitor_default_freq_hz: float = 10.0
+    global_default_batch_ms: int = 1000
+    monitor_default_batch_ms: int = 500
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -28,6 +32,21 @@ class Settings(BaseSettings):
             f"{self.mqtt_topic_prefix}/gateway/"
             f"{self.mqtt_client_id_gateway}/telemetry/global"
         )
+
+    @property
+    def telemetry_monitor_topic(self) -> str:
+        return (
+            f"{self.mqtt_topic_prefix}/gateway/"
+            f"{self.mqtt_client_id_gateway}/telemetry/monitor"
+        )
+
+    @property
+    def command_topic(self) -> str:
+        return f"{self.mqtt_topic_prefix}/gateway/{self.mqtt_client_id_gateway}/cmd"
+
+    @property
+    def command_ack_topic(self) -> str:
+        return f"{self.mqtt_topic_prefix}/gateway/{self.mqtt_client_id_gateway}/cmd_ack"
 
 
 settings = Settings()
