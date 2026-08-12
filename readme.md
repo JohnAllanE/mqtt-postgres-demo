@@ -318,9 +318,9 @@ Default sensors and signal models:
 
 Defaults:
 
-1. Global frequency: 1.0 Hz
+1. Global frequency: 0.25 Hz (one packet every 4 seconds)
 2. Monitor frequency: 10.0 Hz
-3. Global batch window: 1000 ms
+3. Global batch window: 4000 ms
 4. Monitor batch window: 500 ms
 5. Thermostat setpoint for `ac-1`: 72.0 F
 6. Thermostat response defaults:
@@ -502,11 +502,15 @@ Base path: `/api/v1`
    1. Body: `sensor_ids`, `freq_hz`, `batch_window_ms`
 2. `POST /gateway/config/monitor`
    1. Body: `enabled`, `sensor_ids`, `freq_hz`, `batch_window_ms`
-3. `POST /gateway/config/retention`
+3. `POST /monitor/start`
+   1. Body: `sensor_id`, `freq_hz`, `batch_window_ms`
+4. `POST /monitor/stop`
+   1. Body: `{}`
+5. `POST /gateway/config/retention`
    1. Body: `max_age_seconds`, `max_rows_per_sensor`, `cleanup_interval_seconds`
-4. `POST /gateway/config/thermostat-setpoint`
+6. `POST /gateway/config/thermostat-setpoint`
    1. Body: `sensor_id`, `setpoint_f`, optional `transition`
-5. `POST /gateway/reset`
+7. `POST /gateway/reset`
    1. Body: `clear_monitor`, `restore_defaults`
 
 All command endpoints:
@@ -571,10 +575,11 @@ Single-page interface sections:
    4. Manual `Refresh Readings` action with optional 4-second auto-refresh toggle
    5. `Clear Historical Readings` action to reset chart + database history
 4. Monitor panel
-   1. Sensor multiselect
+   1. Sensor selector
    2. Frequency input
-   3. Enable/disable toggle
-   4. Live values pane fed by WebSocket `monitor_samples`
+   3. `Start Monitor` button
+   4. `Stop Monitor` button
+   5. Live values pane and monitor chart fed by WebSocket `monitor_samples`
 5. Thermostat control panel
    1. Thermostat sensor selector (v1 default `ac-1`)
    2. Setpoint numeric input and slider (60 to 80 F, step 0.5)
@@ -582,7 +587,7 @@ Single-page interface sections:
    4. Optional advanced controls for transition parameters
    5. Last acknowledged setpoint + timestamp display
 6. Admin panel
-   1. `Reset Demo` button calls `/admin/reset-database` and gateway reset command
+   1. `Reset Demo` button calls `/admin/reset-readings` and gateway reset command
 
 ## 13. Seed schema and sensors
 
@@ -915,7 +920,7 @@ Status: [ ] Not started [ ] In progress [ ] Complete
 Tasks:
 
 1. [ ] Implement retention cleanup worker (age-based + per-sensor cap).
-2. [ ] Implement admin reset flow (`/admin/reset-database`) and reseed path.
+2. [ ] Implement admin reset flow (`/admin/reset-readings`) and reseed path.
 3. [ ] Execute and document Scenario A through Scenario E results.
 
 Exit criteria:

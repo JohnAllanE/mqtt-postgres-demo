@@ -8,9 +8,10 @@ const eventLogEl = document.getElementById('eventLog');
 
 const globalFreqInput = document.getElementById('globalFreq');
 const setGlobalBtn = document.getElementById('setGlobalBtn');
-const monitorEnabledInput = document.getElementById('monitorEnabled');
+const monitorSensorIdInput = document.getElementById('monitorSensorId');
 const monitorFreqInput = document.getElementById('monitorFreq');
-const setMonitorBtn = document.getElementById('setMonitorBtn');
+const startMonitorBtn = document.getElementById('startMonitorBtn');
+const stopMonitorBtn = document.getElementById('stopMonitorBtn');
 const refreshStatusBtn = document.getElementById('refreshStatusBtn');
 const resetBtn = document.getElementById('resetBtn');
 const thermostatSensorIdInput = document.getElementById('thermostatSensorId');
@@ -27,6 +28,14 @@ let chart;
 let monitorChart;
 let readingsRefreshTimer = null;
 const MONITOR_POINTS_LIMIT = 240;
+let monitorActive = false;
+let pendingThermostatSetpoint = null;
+const pendingThermostatCmdIds = new Set();
+
+function isEditingThermostatControl() {
+  const active = document.activeElement;
+  return active === setpointInput || active === setpointSlider;
+}
 
 function appendEventLog(text) {
   const row = document.createElement('div');
@@ -97,6 +106,15 @@ function ensureMonitorChart() {
   return monitorChart;
 }
 
+function clearMonitorChart() {
+  const c = ensureMonitorChart();
+  c.data.labels = [];
+  for (let i = 0; i < c.data.datasets.length; i += 1) {
+    c.data.datasets[i].data = [];
+  }
+  c.update();
+}
+
 async function loadReadings() {
   const sensorId = sensorIdInput.value.trim() || 'ac-1';
   statusEl.textContent = 'Loading...';
@@ -150,8 +168,8 @@ async function postJson(url, body) {
 
 async function sendGlobalConfig() {
   try {
-    const freq = Number(globalFreqInput.value || '1.0');
-    const payload = { sensor_ids: ['ac-1'], freq_hz: freq, batch_window_ms: 1000 };
+    const freq = Number(globalFreqInput.value || '0.25');
+    const payload = { sensor_ids: [], freq_hz: freq, batch_window_ms: 4000 };
     const result = await postJson('/api/v1/gateway/config/global', payload);
     commandStatusEl.textContent = `Global config command accepted: ${result.cmd_id}`;
     appendEventLog(`Sent global config cmd_id=${result.cmd_id}`);
@@ -160,19 +178,34 @@ async function sendGlobalConfig() {
   }
 }
 
-async function sendMonitorConfig() {
+async function startMonitor() {
   try {
+    const sensorId = (monitorSensorIdInput.value || 'ac-1').trim() || 'ac-1';
     const payload = {
-      enabled: monitorEnabledInput.checked,
-      sensor_ids: ['ac-1'],
+      sensor_id: sensorId,
       freq_hz: Number(monitorFreqInput.value || '10.0'),
       batch_window_ms: 500,
     };
-    const result = await postJson('/api/v1/gateway/config/monitor', payload);
-    commandStatusEl.textContent = `Monitor config command accepted: ${result.cmd_id}`;
-    appendEventLog(`Sent monitor config cmd_id=${result.cmd_id}`);
+    const result = await postJson('/api/v1/monitor/start', payload);
+    monitorActive = true;
+    commandStatusEl.textContent = `Monitor start command accepted: ${result.cmd_id}`;
+    monitorStatusEl.textContent = `Monitor requested for ${sensorId} at ${payload.freq_hz} Hz`;
+    appendEventLog(`Sent monitor start cmd_id=${result.cmd_id} sensor=${sensorId}`);
   } catch (err) {
-    commandStatusEl.textContent = `Monitor config failed: ${err.message}`;
+    commandStatusEl.textContent = `Monitor start failed: ${err.message}`;
+  }
+}
+
+async function stopMonitor() {
+  try {
+    const result = await postJson('/api/v1/monitor/stop', {});
+    monitorActive = false;
+    clearMonitorChart();
+    commandStatusEl.textContent = `Monitor stop command accepted: ${result.cmd_id}`;
+    monitorStatusEl.textContent = 'Monitor stopped.';
+    appendEventLog(`Sent monitor stop cmd_id=${result.cmd_id}`);
+  } catch (err) {
+    commandStatusEl.textContent = `Monitor stop failed: ${err.message}`;
   }
 }
 
@@ -202,10 +235,13 @@ async function setThermostatSetpoint() {
       sensor_id: (thermostatSensorIdInput.value || 'ac-1').trim() || 'ac-1',
       setpoint_f: Number(setpointInput.value || '72'),
     };
+    pendingThermostatSetpoint = payload.setpoint_f;
     const result = await postJson('/api/v1/gateway/config/thermostat-setpoint', payload);
+    pendingThermostatCmdIds.add(result.cmd_id);
     commandStatusEl.textContent = `Thermostat setpoint command accepted: ${result.cmd_id}`;
     appendEventLog(`Sent thermostat setpoint cmd_id=${result.cmd_id}`);
   } catch (err) {
+    pendingThermostatSetpoint = null;
     commandStatusEl.textContent = `Thermostat setpoint failed: ${err.message}`;
   }
 }
@@ -241,9 +277,20 @@ function updateThermostatDisplay(thermostat) {
   }
 
   if (typeof thermostat.setpoint_f === 'number') {
+    const isPendingMatch =
+      typeof pendingThermostatSetpoint === 'number' &&
+      Math.abs(thermostat.setpoint_f - pendingThermostatSetpoint) < 0.051;
+    if (isPendingMatch) {
+      pendingThermostatSetpoint = null;
+    }
+
+    // Keep local controls stable while user edits or while command convergence is pending.
+    const shouldSyncControls = !isEditingThermostatControl() && pendingThermostatSetpoint === null;
     const numericValue = thermostat.setpoint_f.toFixed(1);
-    setpointInput.value = numericValue;
-    setpointSlider.value = numericValue;
+    if (shouldSyncControls) {
+      setpointInput.value = numericValue;
+      setpointSlider.value = numericValue;
+    }
   }
 
   const response = thermostat.response || {};
@@ -251,6 +298,25 @@ function updateThermostatDisplay(thermostat) {
   thermostatStatusEl.textContent =
     `Last setpoint ${thermostat.setpoint_f} F at ${updatedAt} ` +
     `(tau=${response.time_constant_seconds}s, max_delta=${response.max_delta_per_minute} F/min)`;
+}
+
+function updateMonitorFromStatus(statusPayload) {
+  const monitor = statusPayload?.monitor_config;
+  if (!monitor || typeof monitor !== 'object') {
+    return;
+  }
+
+  monitorActive = Boolean(monitor.enabled);
+  if (Array.isArray(monitor.sensor_ids) && monitor.sensor_ids.length > 0) {
+    monitorSensorIdInput.value = monitor.sensor_ids[0];
+  }
+  if (typeof monitor.freq_hz === 'number') {
+    monitorFreqInput.value = String(monitor.freq_hz);
+  }
+
+  if (!monitorActive) {
+    monitorStatusEl.textContent = 'Monitor inactive. Use Start Monitor to request high-resolution data.';
+  }
 }
 
 function pushMonitorSamplesToChart(payloadData) {
@@ -310,11 +376,21 @@ function connectWebSocket() {
     if (eventType === 'status_update') {
       gatewayStatusEl.textContent = JSON.stringify(payload.data, null, 2);
       updateThermostatDisplay(payload.data.thermostat);
+      updateMonitorFromStatus(payload.data);
       appendEventLog('Received status_update');
     } else if (eventType === 'command_ack') {
       lastAckEl.textContent = JSON.stringify(payload.data, null, 2);
       appendEventLog(`Received command_ack cmd_id=${payload.data.cmd_id} ok=${payload.data.ok}`);
+      if (pendingThermostatCmdIds.has(payload.data.cmd_id)) {
+        pendingThermostatCmdIds.delete(payload.data.cmd_id);
+        if (!payload.data.ok) {
+          pendingThermostatSetpoint = null;
+        }
+      }
     } else if (eventType === 'monitor_samples') {
+      if (!monitorActive) {
+        return;
+      }
       const samples = Array.isArray(payload.data?.samples) ? payload.data.samples : [];
       monitorSamplesEl.textContent = JSON.stringify(payload.data, null, 2);
       const plotted = pushMonitorSamplesToChart(payload.data);
@@ -328,7 +404,8 @@ function connectWebSocket() {
 
 loadButton.addEventListener('click', loadReadings);
 setGlobalBtn.addEventListener('click', sendGlobalConfig);
-setMonitorBtn.addEventListener('click', sendMonitorConfig);
+startMonitorBtn.addEventListener('click', startMonitor);
+stopMonitorBtn.addEventListener('click', stopMonitor);
 refreshStatusBtn.addEventListener('click', requestStatus);
 resetBtn.addEventListener('click', resetGateway);
 setThermostatBtn.addEventListener('click', setThermostatSetpoint);

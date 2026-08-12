@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     mqtt_client_id_gateway: str = "gw-001"
     mqtt_topic_prefix: str = "demo"
 
-    global_default_freq_hz: float = 1.0
+    global_default_freq_hz: float = 0.25
     monitor_default_freq_hz: float = 10.0
-    global_default_batch_ms: int = 1000
+    global_default_batch_ms: int = 4000
     monitor_default_batch_ms: int = 500
     thermostat_default_setpoint_f: float = 72.0
     thermostat_min_setpoint_f: float = 60.0

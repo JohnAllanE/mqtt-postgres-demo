@@ -132,6 +132,12 @@ class MonitorConfigRequest(BaseModel):
     batch_window_ms: int = Field(ge=100, le=5000)
 
 
+class MonitorStartRequest(BaseModel):
+    sensor_id: str
+    freq_hz: float = Field(ge=0.1, le=20.0)
+    batch_window_ms: int = Field(ge=100, le=5000)
+
+
 class RetentionConfigRequest(BaseModel):
     max_age_seconds: int = Field(gt=0)
     max_rows_per_sensor: int = Field(gt=0)
@@ -204,6 +210,30 @@ async def set_global_config(req: GlobalConfigRequest) -> dict:
 @app.post("/api/v1/gateway/config/monitor")
 async def set_monitor_config(req: MonitorConfigRequest) -> dict:
     cmd_id = await bridge.publish_command("set_monitor_config", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/monitor/start")
+async def start_monitor(req: MonitorStartRequest) -> dict:
+    payload = {
+        "enabled": True,
+        "sensor_ids": [req.sensor_id],
+        "freq_hz": req.freq_hz,
+        "batch_window_ms": req.batch_window_ms,
+    }
+    cmd_id = await bridge.publish_command("set_monitor_config", payload)
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/monitor/stop")
+async def stop_monitor() -> dict:
+    payload = {
+        "enabled": False,
+        "sensor_ids": [],
+        "freq_hz": 10.0,
+        "batch_window_ms": 500,
+    }
+    cmd_id = await bridge.publish_command("set_monitor_config", payload)
     return {"accepted": True, "cmd_id": cmd_id}
 
 

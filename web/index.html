@@ -16,14 +16,15 @@
         <h2>Gateway Controls</h2>
         <div class="controls controls-wrap">
           <label for="globalFreq">Global Hz</label>
-          <input id="globalFreq" type="number" step="0.1" min="0.1" value="1.0" />
+          <input id="globalFreq" type="number" step="0.05" min="0.05" value="0.25" />
           <button id="setGlobalBtn" type="button">Set Global Config</button>
 
-          <label for="monitorEnabled">Monitor</label>
-          <input id="monitorEnabled" type="checkbox" />
+          <label for="monitorSensorId">Monitor Sensor</label>
+          <input id="monitorSensorId" value="ac-1" />
           <label for="monitorFreq">Monitor Hz</label>
           <input id="monitorFreq" type="number" step="0.1" min="0.1" value="10.0" />
-          <button id="setMonitorBtn" type="button">Set Monitor Config</button>
+          <button id="startMonitorBtn" type="button">Start Monitor</button>
+          <button id="stopMonitorBtn" type="button">Stop Monitor</button>
 
           <button id="refreshStatusBtn" type="button">Request Status</button>
           <button id="resetBtn" type="button">Reset Gateway</button>
