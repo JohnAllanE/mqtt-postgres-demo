@@ -49,6 +49,10 @@ h1 {
   margin-bottom: 16px;
 }
 
+.thermostat-controls input[type="range"] {
+  min-width: 180px;
+}
+
 input, button {
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -81,6 +85,11 @@ button:hover {
   height: 420px;
 }
 
+.monitor-chart-wrap {
+  height: 260px;
+  margin-bottom: 10px;
+}
+
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -98,6 +107,18 @@ button:hover {
   overflow: auto;
   background: #fafcff;
   font-size: 12px;
+}
+
+.monitor-box {
+  min-height: 120px;
+  max-height: 220px;
+}
+
+.split h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .event-log {

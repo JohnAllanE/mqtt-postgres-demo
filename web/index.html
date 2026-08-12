@@ -10,7 +10,7 @@
   <body>
     <main>
       <section class="panel">
-        <h1>MQTT Postgres Demo - Phase 3</h1>
+        <h1>MQTT Postgres Demo - Phase 4</h1>
         <p>Control gateway settings and view live status/ack events while plotting stored telemetry.</p>
 
         <h2>Gateway Controls</h2>
@@ -31,11 +31,27 @@
 
         <div id="commandStatus" class="status-line">No command sent yet.</div>
 
+        <h2>Thermostat Control</h2>
+        <div class="controls controls-wrap thermostat-controls">
+          <label for="thermostatSensorId">Sensor</label>
+          <input id="thermostatSensorId" value="ac-1" />
+
+          <label for="setpointInput">Setpoint F</label>
+          <input id="setpointInput" type="number" min="60" max="80" step="0.5" value="72" />
+          <input id="setpointSlider" type="range" min="60" max="80" step="0.5" value="72" />
+          <button id="setThermostatBtn" type="button">Set Thermostat</button>
+        </div>
+        <div id="thermostatStatus" class="status-line">No thermostat command acknowledged yet.</div>
+
         <h2>Historical Data</h2>
         <div class="controls">
           <label for="sensorId">Sensor ID</label>
           <input id="sensorId" value="ac-1" />
-          <button id="loadBtn" type="button">Load Readings</button>
+          <button id="loadBtn" type="button">Refresh Readings Now</button>
+          <label for="autoRefreshReadings">
+            <input id="autoRefreshReadings" type="checkbox" /> Auto-refresh (4s)
+          </label>
+          <button id="clearHistoryBtn" type="button">Clear Historical Readings</button>
         </div>
 
         <div id="status" class="status-line">Waiting for data...</div>
@@ -44,10 +60,24 @@
           <canvas id="sensorChart"></canvas>
         </div>
 
+        <h2>High-Resolution Monitor Stream</h2>
+        <div class="status-line">This chart is populated from live monitor messages relayed by the server MQTT receiver (not from PostgreSQL).</div>
+        <div class="chart-wrap monitor-chart-wrap">
+          <canvas id="monitorChart"></canvas>
+        </div>
+        <div id="monitorStatus" class="status-line">No monitor samples received yet.</div>
+        <pre id="monitorSamples" class="json-box monitor-box">{}</pre>
+
         <h2>Live Events</h2>
         <div class="split">
-          <pre id="gatewayStatus" class="json-box">{}</pre>
-          <pre id="lastAck" class="json-box">{}</pre>
+          <div>
+            <h3>Gateway Status Snapshot</h3>
+            <pre id="gatewayStatus" class="json-box">{}</pre>
+          </div>
+          <div>
+            <h3>Last Command Ack</h3>
+            <pre id="lastAck" class="json-box">{}</pre>
+          </div>
         </div>
         <div id="eventLog" class="event-log"></div>
       </section>

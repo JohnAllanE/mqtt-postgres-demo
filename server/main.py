@@ -101,6 +101,9 @@ async def _on_connection(payload: dict[str, Any]) -> None:
 async def lifespan(_: FastAPI):
     await db.connect()
     await db.init_schema_and_seed()
+    if settings.clear_readings_on_startup:
+        deleted = await db.clear_readings()
+        logger.info("Cleared %s historical rows at startup", deleted)
     bridge.set_event_handlers(_on_status, _on_cmd_ack, _on_monitor_samples, _on_connection)
     await bridge.start()
     try:
@@ -133,6 +136,17 @@ class RetentionConfigRequest(BaseModel):
     max_age_seconds: int = Field(gt=0)
     max_rows_per_sensor: int = Field(gt=0)
     cleanup_interval_seconds: int = Field(gt=0)
+
+
+class ThermostatTransitionRequest(BaseModel):
+    time_constant_seconds: int = Field(ge=10, le=600)
+    max_delta_per_minute: float = Field(ge=0.5, le=10.0)
+
+
+class ThermostatSetpointRequest(BaseModel):
+    sensor_id: str
+    setpoint_f: float = Field(ge=60.0, le=80.0)
+    transition: Optional[ThermostatTransitionRequest] = None
 
 
 class ResetRequest(BaseModel):
@@ -199,10 +213,22 @@ async def set_retention_config(req: RetentionConfigRequest) -> dict:
     return {"accepted": True, "cmd_id": cmd_id}
 
 
+@app.post("/api/v1/gateway/config/thermostat-setpoint")
+async def set_thermostat_setpoint(req: ThermostatSetpointRequest) -> dict:
+    cmd_id = await bridge.publish_command("set_thermostat_setpoint", req.model_dump())
+    return {"accepted": True, "cmd_id": cmd_id}
+
+
 @app.post("/api/v1/gateway/reset")
 async def reset_gateway(req: ResetRequest) -> dict:
     cmd_id = await bridge.publish_command("reset_gateway_state", req.model_dump())
     return {"accepted": True, "cmd_id": cmd_id}
+
+
+@app.post("/api/v1/admin/reset-readings")
+async def reset_readings() -> dict:
+    deleted = await db.clear_readings()
+    return {"ok": True, "deleted_rows": deleted}
 
 
 @app.get("/api/v1/readings")

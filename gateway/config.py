@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     monitor_default_freq_hz: float = 10.0
     global_default_batch_ms: int = 1000
     monitor_default_batch_ms: int = 500
+    thermostat_default_setpoint_f: float = 72.0
+    thermostat_min_setpoint_f: float = 60.0
+    thermostat_max_setpoint_f: float = 80.0
+    thermostat_response_time_constant_seconds: int = 90
+    thermostat_max_delta_per_minute: float = 4.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

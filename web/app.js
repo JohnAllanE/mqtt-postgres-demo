@@ -13,8 +13,20 @@ const monitorFreqInput = document.getElementById('monitorFreq');
 const setMonitorBtn = document.getElementById('setMonitorBtn');
 const refreshStatusBtn = document.getElementById('refreshStatusBtn');
 const resetBtn = document.getElementById('resetBtn');
+const thermostatSensorIdInput = document.getElementById('thermostatSensorId');
+const setpointInput = document.getElementById('setpointInput');
+const setpointSlider = document.getElementById('setpointSlider');
+const setThermostatBtn = document.getElementById('setThermostatBtn');
+const thermostatStatusEl = document.getElementById('thermostatStatus');
+const autoRefreshReadingsInput = document.getElementById('autoRefreshReadings');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const monitorSamplesEl = document.getElementById('monitorSamples');
+const monitorStatusEl = document.getElementById('monitorStatus');
 
 let chart;
+let monitorChart;
+let readingsRefreshTimer = null;
+const MONITOR_POINTS_LIMIT = 240;
 
 function appendEventLog(text) {
   const row = document.createElement('div');
@@ -55,6 +67,36 @@ function ensureChart() {
   return chart;
 }
 
+function ensureMonitorChart() {
+  if (monitorChart) {
+    return monitorChart;
+  }
+
+  const ctx = document.getElementById('monitorChart');
+  monitorChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'monitor.condenser_temp_f', data: [], borderWidth: 2 },
+        { label: 'monitor.evaporator_temp_f', data: [], borderWidth: 2 },
+        { label: 'monitor.high_side_psi', data: [], borderWidth: 2 },
+        { label: 'monitor.low_side_psi', data: [], borderWidth: 2 },
+      ],
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { maxTicksLimit: 8 } },
+      },
+    },
+  });
+
+  return monitorChart;
+}
+
 async function loadReadings() {
   const sensorId = sensorIdInput.value.trim() || 'ac-1';
   statusEl.textContent = 'Loading...';
@@ -77,10 +119,19 @@ async function loadReadings() {
     }
     c.update();
 
-    statusEl.textContent = `Loaded ${rows.length} rows for ${sensorId}`;
+    statusEl.textContent = `Refreshed ${rows.length} historical rows for ${sensorId}`;
   } catch (err) {
     statusEl.textContent = `Load failed: ${err.message}`;
   }
+}
+
+function clearChart() {
+  const c = ensureChart();
+  c.data.labels = [];
+  for (let i = 0; i < c.data.datasets.length; i += 1) {
+    c.data.datasets[i].data = [];
+  }
+  c.update();
 }
 
 async function postJson(url, body) {
@@ -145,6 +196,97 @@ async function resetGateway() {
   }
 }
 
+async function setThermostatSetpoint() {
+  try {
+    const payload = {
+      sensor_id: (thermostatSensorIdInput.value || 'ac-1').trim() || 'ac-1',
+      setpoint_f: Number(setpointInput.value || '72'),
+    };
+    const result = await postJson('/api/v1/gateway/config/thermostat-setpoint', payload);
+    commandStatusEl.textContent = `Thermostat setpoint command accepted: ${result.cmd_id}`;
+    appendEventLog(`Sent thermostat setpoint cmd_id=${result.cmd_id}`);
+  } catch (err) {
+    commandStatusEl.textContent = `Thermostat setpoint failed: ${err.message}`;
+  }
+}
+
+async function clearHistoricalReadings() {
+  try {
+    const result = await postJson('/api/v1/admin/reset-readings', {});
+    clearChart();
+    statusEl.textContent = `Cleared historical readings. Deleted rows: ${result.deleted_rows}`;
+    appendEventLog(`Cleared historical readings rows=${result.deleted_rows}`);
+  } catch (err) {
+    statusEl.textContent = `Clear history failed: ${err.message}`;
+  }
+}
+
+function syncReadingsAutoRefresh() {
+  const enabled = Boolean(autoRefreshReadingsInput.checked);
+  if (enabled && readingsRefreshTimer === null) {
+    readingsRefreshTimer = setInterval(loadReadings, 4000);
+    appendEventLog('Historical auto-refresh enabled (4s)');
+    statusEl.textContent = 'Historical auto-refresh enabled (4s)';
+  } else if (!enabled && readingsRefreshTimer !== null) {
+    clearInterval(readingsRefreshTimer);
+    readingsRefreshTimer = null;
+    appendEventLog('Historical auto-refresh disabled');
+    statusEl.textContent = 'Historical auto-refresh disabled';
+  }
+}
+
+function updateThermostatDisplay(thermostat) {
+  if (!thermostat || typeof thermostat !== 'object') {
+    return;
+  }
+
+  if (typeof thermostat.setpoint_f === 'number') {
+    const numericValue = thermostat.setpoint_f.toFixed(1);
+    setpointInput.value = numericValue;
+    setpointSlider.value = numericValue;
+  }
+
+  const response = thermostat.response || {};
+  const updatedAt = thermostat.last_set_cmd_ts || 'n/a';
+  thermostatStatusEl.textContent =
+    `Last setpoint ${thermostat.setpoint_f} F at ${updatedAt} ` +
+    `(tau=${response.time_constant_seconds}s, max_delta=${response.max_delta_per_minute} F/min)`;
+}
+
+function pushMonitorSamplesToChart(payloadData) {
+  const samples = Array.isArray(payloadData?.samples) ? payloadData.samples : [];
+  if (samples.length === 0) {
+    return 0;
+  }
+
+  const c = ensureMonitorChart();
+  let appended = 0;
+  for (const sample of samples) {
+    if (!Array.isArray(sample?.values) || sample.values.length < 4) {
+      continue;
+    }
+
+    const label = sample.sample_ts ? new Date(sample.sample_ts).toLocaleTimeString() : new Date().toLocaleTimeString();
+    c.data.labels.push(label);
+    for (let i = 0; i < 4; i += 1) {
+      c.data.datasets[i].data.push(sample.values[i]);
+    }
+
+    while (c.data.labels.length > MONITOR_POINTS_LIMIT) {
+      c.data.labels.shift();
+      for (let i = 0; i < 4; i += 1) {
+        c.data.datasets[i].data.shift();
+      }
+    }
+    appended += 1;
+  }
+
+  if (appended > 0) {
+    c.update();
+  }
+  return appended;
+}
+
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
@@ -167,12 +309,17 @@ function connectWebSocket() {
     const eventType = payload.event;
     if (eventType === 'status_update') {
       gatewayStatusEl.textContent = JSON.stringify(payload.data, null, 2);
+      updateThermostatDisplay(payload.data.thermostat);
       appendEventLog('Received status_update');
     } else if (eventType === 'command_ack') {
       lastAckEl.textContent = JSON.stringify(payload.data, null, 2);
       appendEventLog(`Received command_ack cmd_id=${payload.data.cmd_id} ok=${payload.data.ok}`);
     } else if (eventType === 'monitor_samples') {
-      appendEventLog('Received monitor_samples');
+      const samples = Array.isArray(payload.data?.samples) ? payload.data.samples : [];
+      monitorSamplesEl.textContent = JSON.stringify(payload.data, null, 2);
+      const plotted = pushMonitorSamplesToChart(payload.data);
+      monitorStatusEl.textContent = `Latest monitor batch: ${samples.length} sample(s) at ${new Date().toLocaleTimeString()}`;
+      appendEventLog(`Received monitor_samples count=${samples.length} plotted=${plotted}`);
     } else if (eventType === 'connection_update') {
       appendEventLog(`MQTT connection: ${JSON.stringify(payload.data)}`);
     }
@@ -184,7 +331,16 @@ setGlobalBtn.addEventListener('click', sendGlobalConfig);
 setMonitorBtn.addEventListener('click', sendMonitorConfig);
 refreshStatusBtn.addEventListener('click', requestStatus);
 resetBtn.addEventListener('click', resetGateway);
+setThermostatBtn.addEventListener('click', setThermostatSetpoint);
+clearHistoryBtn.addEventListener('click', clearHistoricalReadings);
+autoRefreshReadingsInput.addEventListener('change', syncReadingsAutoRefresh);
+setpointInput.addEventListener('input', () => {
+  setpointSlider.value = setpointInput.value;
+});
+setpointSlider.addEventListener('input', () => {
+  setpointInput.value = setpointSlider.value;
+});
 
 connectWebSocket();
 loadReadings();
-setInterval(loadReadings, 4000);
+ensureMonitorChart();

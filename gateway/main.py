@@ -37,10 +37,20 @@ STATE = {
     },
     "thermostat": {
         "sensor_id": "ac-1",
-        "setpoint_f": 72.0,
+        "setpoint_f": settings.thermostat_default_setpoint_f,
         "response": {
-            "time_constant_seconds": 90,
-            "max_delta_per_minute": 4.0,
+            "time_constant_seconds": settings.thermostat_response_time_constant_seconds,
+            "max_delta_per_minute": settings.thermostat_max_delta_per_minute,
+        },
+        "last_set_cmd_ts": None,
+    },
+    "ac_dynamics": {
+        "last_update_ts": time.time(),
+        "channels": {
+            "condenser_temp_f": settings.thermostat_default_setpoint_f,
+            "evaporator_temp_f": settings.thermostat_default_setpoint_f - 17.0,
+            "high_side_psi": 180.0,
+            "low_side_psi": 30.0,
         },
     },
 }
@@ -98,12 +108,54 @@ def _status_payload() -> dict:
     }
 
 
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
 def _next_ac_values(now_epoch: float) -> list[float]:
-    condenser = 72.0 + 4.0 * math.sin(now_epoch / 8.0)
-    evaporator = 55.0 + 2.5 * math.sin(now_epoch / 7.5 + 0.8)
-    high_side = 180.0 + 12.0 * math.sin(now_epoch / 12.0)
-    low_side = 30.0 + 5.0 * math.sin(now_epoch / 10.0 + 1.2)
-    return [round(condenser, 3), round(evaporator, 3), round(high_side, 3), round(low_side, 3)]
+    thermo = STATE["thermostat"]
+    response = thermo["response"]
+    channels = STATE["ac_dynamics"]["channels"]
+
+    last_update = float(STATE["ac_dynamics"]["last_update_ts"])
+    dt = _clamp(now_epoch - last_update, 0.02, 1.0)
+    STATE["ac_dynamics"]["last_update_ts"] = now_epoch
+
+    setpoint = float(thermo["setpoint_f"])
+    time_constant = float(response["time_constant_seconds"])
+    max_delta_per_minute = float(response["max_delta_per_minute"])
+
+    targets = {
+        "condenser_temp_f": setpoint + 0.35 * math.sin(now_epoch / 18.0),
+        "evaporator_temp_f": (setpoint - 17.0) + 0.25 * math.sin(now_epoch / 16.0 + 0.7),
+        "high_side_psi": 180.0 + (setpoint - 72.0) * 2.5 + 3.0 * math.sin(now_epoch / 14.0),
+        "low_side_psi": 30.0 + (72.0 - setpoint) * 0.8 + 1.4 * math.sin(now_epoch / 12.0 + 1.1),
+    }
+    noise_terms = {
+        "condenser_temp_f": 0.03 * math.sin(now_epoch * 2.3),
+        "evaporator_temp_f": 0.03 * math.sin(now_epoch * 1.9 + 1.2),
+        "high_side_psi": 0.09 * math.sin(now_epoch * 1.5 + 0.4),
+        "low_side_psi": 0.07 * math.sin(now_epoch * 1.7 + 2.1),
+    }
+
+    max_step_temp = max_delta_per_minute * dt / 60.0
+    max_step_psi = max_step_temp * 6.0
+
+    updated = {}
+    for channel, target in targets.items():
+        current = float(channels[channel])
+        raw_step = (target - current) * (dt / time_constant)
+        channel_step_cap = max_step_psi if channel.endswith("psi") else max_step_temp
+        clamped_step = _clamp(raw_step, -channel_step_cap, channel_step_cap)
+        updated[channel] = current + clamped_step + noise_terms[channel]
+
+    channels.update(updated)
+    return [
+        round(float(channels["condenser_temp_f"]), 3),
+        round(float(channels["evaporator_temp_f"]), 3),
+        round(float(channels["high_side_psi"]), 3),
+        round(float(channels["low_side_psi"]), 3),
+    ]
 
 
 def _telemetry_payload() -> dict:
@@ -206,6 +258,73 @@ def _handle_command(client: mqtt.Client, payload: dict[str, Any]) -> None:
             _publish_status(client)
             return
 
+        if cmd in ("set_thermostat_setpoint", "set_thermostat_set_point"):
+            sensor_id = str(body.get("sensor_id") or "")
+            if sensor_id != STATE["thermostat"]["sensor_id"]:
+                _publish_ack(
+                    client,
+                    cmd_id,
+                    False,
+                    error=f"Unsupported thermostat sensor_id: {sensor_id}",
+                )
+                return
+
+            setpoint_f = float(body.get("setpoint_f"))
+            if not (
+                settings.thermostat_min_setpoint_f
+                <= setpoint_f
+                <= settings.thermostat_max_setpoint_f
+            ):
+                _publish_ack(
+                    client,
+                    cmd_id,
+                    False,
+                    error=(
+                        f"setpoint_f must be in range "
+                        f"{settings.thermostat_min_setpoint_f}-{settings.thermostat_max_setpoint_f}"
+                    ),
+                )
+                return
+
+            transition = body.get("transition") or {}
+            if transition:
+                time_constant_seconds = int(
+                    transition.get(
+                        "time_constant_seconds",
+                        STATE["thermostat"]["response"]["time_constant_seconds"],
+                    )
+                )
+                max_delta_per_minute = float(
+                    transition.get(
+                        "max_delta_per_minute",
+                        STATE["thermostat"]["response"]["max_delta_per_minute"],
+                    )
+                )
+                if not (10 <= time_constant_seconds <= 600):
+                    _publish_ack(
+                        client,
+                        cmd_id,
+                        False,
+                        error="transition.time_constant_seconds must be in range 10-600",
+                    )
+                    return
+                if not (0.5 <= max_delta_per_minute <= 10.0):
+                    _publish_ack(
+                        client,
+                        cmd_id,
+                        False,
+                        error="transition.max_delta_per_minute must be in range 0.5-10.0",
+                    )
+                    return
+                STATE["thermostat"]["response"]["time_constant_seconds"] = time_constant_seconds
+                STATE["thermostat"]["response"]["max_delta_per_minute"] = max_delta_per_minute
+
+            STATE["thermostat"]["setpoint_f"] = setpoint_f
+            STATE["thermostat"]["last_set_cmd_ts"] = datetime.now(timezone.utc).isoformat()
+            _publish_ack(client, cmd_id, True)
+            _publish_status(client)
+            return
+
         if cmd == "request_status":
             _publish_ack(client, cmd_id, True)
             _publish_status(client)
@@ -219,6 +338,10 @@ def _handle_command(client: mqtt.Client, payload: dict[str, Any]) -> None:
             STATE["monitor_config"]["sensor_ids"] = []
             STATE["monitor_config"]["freq_hz"] = settings.monitor_default_freq_hz
             STATE["monitor_config"]["batch_window_ms"] = settings.monitor_default_batch_ms
+            STATE["thermostat"]["setpoint_f"] = settings.thermostat_default_setpoint_f
+            STATE["thermostat"]["response"]["time_constant_seconds"] = settings.thermostat_response_time_constant_seconds
+            STATE["thermostat"]["response"]["max_delta_per_minute"] = settings.thermostat_max_delta_per_minute
+            STATE["thermostat"]["last_set_cmd_ts"] = None
             _publish_ack(client, cmd_id, True)
             _publish_status(client)
             return

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     postgres_db: str = "mqtt_demo"
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
+    clear_readings_on_startup: bool = False
 
     server_host: str = "0.0.0.0"
     server_port: int = 8000

@@ -524,8 +524,8 @@ All command endpoints:
       3. `to_ts` optional ISO8601
       4. `limit` default 500, max 5000
    2. Returns historical rows from PostgreSQL.
-2. `POST /admin/reset-database`
-   1. Truncates readings table and resets demo seed data.
+2. `POST /admin/reset-readings`
+   1. Deletes all historical rows from `sensor_readings`.
 
 ## 11. WebSocket contract
 
@@ -568,11 +568,13 @@ Single-page interface sections:
    1. Checkbox list of sensors and fields
    2. Time window picker
    3. Chart.js line graph using `/readings` results
+   4. Manual `Refresh Readings` action with optional 4-second auto-refresh toggle
+   5. `Clear Historical Readings` action to reset chart + database history
 4. Monitor panel
    1. Sensor multiselect
    2. Frequency input
    3. Enable/disable toggle
-   4. Live values table fed by WebSocket `monitor_samples`
+   4. Live values pane fed by WebSocket `monitor_samples`
 5. Thermostat control panel
    1. Thermostat sensor selector (v1 default `ac-1`)
    2. Setpoint numeric input and slider (60 to 80 F, step 0.5)
@@ -712,6 +714,19 @@ Quick checks:
 ```bash
 curl -sS http://localhost:8000/api/v1/health
 curl -sS "http://localhost:8000/api/v1/readings?sensor_id=ac-1&limit=5"
+```
+
+Optional blank-start mode for historical data:
+
+```bash
+export CLEAR_READINGS_ON_STARTUP=true
+.venv/bin/python -m server.main
+```
+
+Or clear history at runtime using the API:
+
+```bash
+curl -sS -X POST http://localhost:8000/api/v1/admin/reset-readings
 ```
 
 Stop everything:
@@ -878,15 +893,15 @@ Exit criteria:
 
 ### Phase 4: Thermostat setpoint end-to-end
 
-Status: [ ] Not started [ ] In progress [ ] Complete
+Status: [ ] Not started [x] In progress [ ] Complete
 
 Tasks:
 
-1. [ ] Add `POST /api/v1/gateway/config/thermostat-setpoint`.
-2. [ ] Add gateway `set_thermostat_setpoint` command handling.
-3. [ ] Implement gradual thermostat response model (first-order lag + rate clamp + noise).
-4. [ ] Add UI thermostat control panel (numeric input or slider + Set button).
-5. [ ] Show last acknowledged setpoint and timestamp in UI.
+1. [x] Add `POST /api/v1/gateway/config/thermostat-setpoint`.
+2. [x] Add gateway `set_thermostat_setpoint` command handling.
+3. [x] Implement gradual thermostat response model (first-order lag + rate clamp + noise).
+4. [x] Add UI thermostat control panel (numeric input or slider + Set button).
+5. [x] Show last acknowledged setpoint and timestamp in UI.
 
 Exit criteria:
 
@@ -928,6 +943,10 @@ Record concise updates as work proceeds.
    1. Completed: Phase 3 command endpoints, gateway command handling, status/ack topic flow, websocket events, and UI controls.
    2. Notes: Verified `GET /api/v1/status`, command POST endpoints, and websocket connection event using a Python `websockets` client.
    3. Blockers: None for Phase 3.
+5. Date: 2026-08-12
+   1. Completed: Phase 4 thermostat endpoint, gateway thermostat command handling, gradual AC response simulation, and thermostat UI controls/status display.
+   2. Notes: Implementation complete in code; Scenario E runtime verification is the remaining validation step.
+   3. Blockers: None for implementation.
 
 ## 22. Future extension points
 

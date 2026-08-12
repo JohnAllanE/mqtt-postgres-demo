@@ -146,5 +146,19 @@ class Database:
             for row in rows
         ]
 
+    async def clear_readings(self) -> int:
+        if self.pool is None:
+            raise RuntimeError("Database pool is not connected")
+
+        query = "delete from sensor_readings"
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(query)
+
+        # asyncpg returns strings like "DELETE 123".
+        try:
+            return int(result.split()[1])
+        except Exception:
+            return 0
+
 
 db = Database()
