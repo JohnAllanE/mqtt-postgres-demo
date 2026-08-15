@@ -8,7 +8,8 @@ import json
 import math
 import random
 import time
-from typing import Set
+from typing import Set, Optional
+import argparse
 
 import websockets
 
@@ -42,7 +43,9 @@ class SensorModel:
 clients: Set[websockets.WebSocketServerProtocol] = set()
 
 
-async def handler(ws, path):
+async def handler(ws, path=None):
+    # websockets library changed handler signature in newer versions —
+    # accept either (ws, path) or just (ws,) and ignore the path when present.
     clients.add(ws)
     try:
         await ws.wait_closed()
@@ -70,16 +73,35 @@ async def broadcaster():
         await asyncio.sleep(INTERVAL)
 
 
-def main():
-    port = 8765
-    start_server = websockets.serve(handler, "0.0.0.0", port)
-    print(f"Sensor simulator websocket server listening on ws://localhost:{port}")
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(start_server)
-    loop.create_task(broadcaster())
+async def _run_server(port: int, duration: Optional[float] = None):
+    server = await websockets.serve(handler, "0.0.0.0", port)
+    # run broadcaster as a background task so we can optionally stop after `duration`
+    task = asyncio.create_task(broadcaster())
     try:
-        loop.run_forever()
+        if duration is None:
+            await task
+        else:
+            await asyncio.sleep(duration)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Sensor simulator websocket server")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--duration", type=float, default=None, help="number of seconds to run (default: run forever)")
+    args = parser.parse_args()
+    port = args.port
+    duration = args.duration
+    print(f"Sensor simulator websocket server listening on ws://localhost:{port}")
+    try:
+        asyncio.run(_run_server(port, duration))
     except KeyboardInterrupt:
         print("Shutting down")
 

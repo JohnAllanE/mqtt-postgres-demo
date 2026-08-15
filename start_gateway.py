@@ -43,8 +43,10 @@ def install_requirements(python_exe: Path, req_file: Path):
 
 
 def main():
-    # Forward remaining args to simulator
+    # Forward remaining args to simulator. Allow a leading '--' separator.
     forward_args = sys.argv[1:]
+    if forward_args and forward_args[0] == "--":
+        forward_args = forward_args[1:]
 
     simulator_script = Path("gateway") / "simulator.py"
     if not simulator_script.exists():
