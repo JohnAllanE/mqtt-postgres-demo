@@ -32,6 +32,8 @@ function makeChart(ctx, label) {
 
 function createGrid() {
   const container = document.getElementById('charts');
+  // clear any stray text nodes or previous content
+  container.innerHTML = '';
   for (let i = 0; i < NUM_SENSORS; i++) {
     const card = document.createElement('div');
     card.className = 'chart-card';
