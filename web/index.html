@@ -6,7 +6,7 @@
     <title>MQTT-Postgres Demo — Phase 1</title>
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; }
-      .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
       .chart-card { background: #fff; border: 1px solid #eee; padding: 8px; }
       .chart-title { font-size: 12px; margin-bottom: 6px; }
       canvas { width: 100% !important; height: 120px !important; }
@@ -17,6 +17,30 @@
     <p>Minimal web UI displaying raw sensor values streamed over WebSockets.</p>
 
     <section class="grid" id="charts"></section>
+
+    <h2>Logged Sensor Values (Phase 2)</h2>
+    <div>
+      Poll interval (s): <input id="poll-interval" type="number" value="1" min="0.1" step="0.1" />
+      <button id="start-poll">Start Polling</button>
+      <button id="stop-poll">Stop</button>
+      <button id="reset-db">Reset DB</button>
+    </div>
+    <div id="logged-values">
+      <table id="logged-table">
+        <thead><tr><th>ts</th><th>values</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2>Maintenance Mode</h2>
+    <div>
+      Select sensors (comma-separated 0-based): <input id="maintenance-sensors" type="text" value="0,1" />
+      Broadcast interval (s): <input id="maintenance-interval" type="number" value="0.5" step="0.1" />
+      <button id="apply-config">Apply Config</button>
+    </div>
+    <div class="chart-card">
+      <canvas id="maintenance-canvas"></canvas>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>

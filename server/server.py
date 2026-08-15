@@ -7,14 +7,27 @@ clients.
 """
 import asyncio
 import json
+import os
 from typing import Set
 
 import websockets
 
-WS_PORT = 8765
-TCP_PORT = 9999
+WS_PORT = int(os.environ.get('WS_PORT', 8765))
+TCP_PORT = int(os.environ.get('TCP_PORT', 9999))
 
 ws_clients: Set[websockets.WebSocketServerProtocol] = set()
+
+# Optional MQTT bridge: if paho-mqtt is available, subscribe to maintenance and
+# broadcast topics and forward payloads to websocket clients.
+try:
+    import paho.mqtt.client as mqtt
+except Exception:
+    mqtt = None
+
+MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
+MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+_mqtt_client = None
+_mqtt_loop = None
 
 
 async def ws_handler(ws, path=None):
@@ -36,6 +49,40 @@ async def broadcast(message: str):
     if not ws_clients:
         return
     await asyncio.gather(*(_safe_send(ws, message) for ws in list(ws_clients)), return_exceptions=True)
+
+
+def _mqtt_on_message(client, userdata, msg):
+    payload = None
+    try:
+        payload = msg.payload.decode('utf-8')
+    except Exception:
+        return
+    loop = userdata.get('loop') if isinstance(userdata, dict) else None
+    if loop is None:
+        return
+    # schedule broadcast on the asyncio loop
+    try:
+        asyncio.run_coroutine_threadsafe(broadcast(payload), loop)
+    except Exception:
+        pass
+
+
+def start_mqtt_bridge(loop):
+    global _mqtt_client
+    if mqtt is None:
+        print('paho-mqtt not installed; skipping MQTT bridge')
+        return
+    try:
+        client = mqtt.Client(userdata={'loop': loop})
+        client.on_message = _mqtt_on_message
+        client.connect(MQTT_HOST, MQTT_PORT, 60)
+        client.subscribe('sensors/maintenance')
+        client.subscribe('sensors/broadcast')
+        client.loop_start()
+        _mqtt_client = client
+        print(f'MQTT bridge connected to {MQTT_HOST}:{MQTT_PORT} and forwarding topics to websockets')
+    except Exception as e:
+        print('Failed to start MQTT bridge:', e)
 
 
 async def handle_simulator(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -66,6 +113,13 @@ async def main():
 
     print(f"WebSocket server listening on ws://localhost:{WS_PORT}")
     print(f"TCP server for simulators listening on 0.0.0.0:{TCP_PORT}")
+
+    # start optional MQTT bridge that forwards maintenance/broadcast topics
+    loop = asyncio.get_running_loop()
+    try:
+        start_mqtt_bridge(loop)
+    except Exception:
+        pass
 
     async with ws_server, tcp_server:
         await asyncio.Future()  # run forever
