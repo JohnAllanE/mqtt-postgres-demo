@@ -40,6 +40,19 @@ python3 start_web.py 8080
 
 Both scripts forward extra args to the underlying commands if needed. They share the repository `.venv` and `requirements.txt` (see notes below about environments).
 
+## Development tips
+
+- Run the gateway simulator for a limited time (useful for tests):
+
+```bash
+# the `--` separates args for the helper script from args forwarded to the simulator
+python3 start_gateway.py -- --duration 10
+```
+
+- The web helper accepts a port argument: `python3 start_web.py 8080`.
+
+- To force reinstallation inside the venv (not implemented yet), we can add a `--reinstall` flag to the helpers — tell me if you want that.
+
 ## Phase 1 — Minimum Viable Demo (High priority)
 
 Goal: produce a small, runnable demo that shows sensor data flowing from a simulator into storage and to a simple web UI.
@@ -55,3 +68,6 @@ Checklist (Phase 1)
 	- The web app should connect to a lightweight WS endpoint that forwards recent samples for each sensor.
 
 
+
+TODO:
+- limit the data the web displays to the last 2 seconds or so (create a variable for this).  We do not want to hold on to the previous data, it can be a circular buffer or similar
