@@ -3,12 +3,18 @@ from flask import Flask, jsonify, request
 import os
 import psycopg2
 from urllib.parse import urlparse
-import subprocess
 import json
+
+try:
+    import paho.mqtt.client as mqtt
+except Exception:
+    mqtt = None
 
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgres://demo:demo@localhost:5432/demo')
+MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
+MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
 
 
 def connect_db():
@@ -21,6 +27,19 @@ def connect_db():
         port=url.port or 5432,
     )
     return conn
+
+
+@app.after_request
+def add_cors_headers(resp):
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    return resp
+
+
+@app.route('/api/<path:_any>', methods=['OPTIONS'])
+def preflight(_any):
+    return ('', 204)
 
 
 @app.route('/api/recent')
@@ -42,8 +61,14 @@ def reset_db():
     schema = os.path.join(base, 'schema.sql')
     seed = os.path.join(base, 'seed.sql')
     try:
-        subprocess.run(['psql', DATABASE_URL, '-f', schema], check=True)
-        subprocess.run(['psql', DATABASE_URL, '-f', seed], check=True)
+        conn = connect_db()
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            with open(schema, 'r', encoding='utf-8') as fh:
+                cur.execute(fh.read())
+            with open(seed, 'r', encoding='utf-8') as fh:
+                cur.execute(fh.read())
+        conn.close()
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
     return jsonify({'ok': True})
@@ -51,9 +76,18 @@ def reset_db():
 
 @app.route('/api/config', methods=['POST'])
 def config():
-    # Accepts JSON with keys: broadcast_interval, maintenance_interval, maintenance_sensors
+    # Accepts JSON with keys like: maintenance_interval, broadcast_interval,
+    # maintenance_sensors (comma string or list[int])
     data = request.get_json() or {}
-    # For now, just echo back; integration with MQTT broker can be done here
+    # Publish config over MQTT so simulators can apply changes live.
+    if mqtt is not None:
+        try:
+            client = mqtt.Client()
+            client.connect(MQTT_HOST, MQTT_PORT, 60)
+            client.publish('sensors/config', json.dumps(data))
+            client.disconnect()
+        except Exception as e:
+            return jsonify({'ok': False, 'error': f'mqtt publish failed: {e}'}), 500
     return jsonify({'ok': True, 'applied': data})
 
 

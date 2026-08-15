@@ -54,18 +54,28 @@ def on_message(client, userdata, msg):
     if obj.get('type') not in ('batch', 'broadcast'):
         return
     samples = obj.get('samples') or []
-    # pack values into an array ordered by sensor_id (assumes contiguous 0..N-1)
+    # Pack values into arrays ordered by sensor_id and split into two equipment
+    # groups: first 6 sensors and last 4 sensors.
     samples_sorted = sorted(samples, key=lambda s: s.get('sensor_id', 0))
     values = [float(s.get('value', 0.0)) for s in samples_sorted]
+    values6 = values[:6]
+    values4 = values[6:10]
     ts_ms = samples_sorted[0].get('ts') if samples_sorted else int(time.time() * 1000)
     ts = time.strftime('%Y-%m-%d %H:%M:%S+00', time.gmtime(ts_ms / 1000.0))
 
     conn = userdata.get('db')
     cur = conn.cursor()
     try:
-        # For demo, attach equipment_type NULL; production should map sensors to equipment
-        cur.execute('INSERT INTO sensor_data (ts, equipment_type, values) VALUES (%s, %s, %s)',
-                    (ts, None, values))
+        if len(values6) == 6:
+            cur.execute(
+                'INSERT INTO sensor_data (ts, equipment_type, values) VALUES (%s, %s, %s)',
+                (ts, 1, values6),
+            )
+        if len(values4) == 4:
+            cur.execute(
+                'INSERT INTO sensor_data (ts, equipment_type, values) VALUES (%s, %s, %s)',
+                (ts, 2, values4),
+            )
     except Exception as e:
         print('DB insert error:', e)
     finally:

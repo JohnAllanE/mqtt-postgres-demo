@@ -38,11 +38,15 @@ def main():
     forward_args = sys.argv[1:]
     if forward_args and forward_args[0] == "--":
         forward_args = forward_args[1:]
-    # helper options: allow skipping starting the ingest service
+    # helper options: allow skipping starting ingest/api services
     no_ingest = False
+    no_api = False
     if "--no-ingest" in forward_args:
         no_ingest = True
         forward_args = [a for a in forward_args if a != "--no-ingest"]
+    if "--no-api" in forward_args:
+        no_api = True
+        forward_args = [a for a in forward_args if a != "--no-api"]
 
     server_script = Path("server") / "server.py"
     if not server_script.exists():
@@ -57,6 +61,11 @@ def main():
             if ingest_script.exists():
                 print(f"Starting ingest service in background: {ingest_script}")
                 subprocess.Popen([sys.executable, str(ingest_script)], stdout=None, stderr=None)
+        if not no_api:
+            api_script = Path("server") / "api.py"
+            if api_script.exists():
+                print(f"Starting API service in background: {api_script}")
+                subprocess.Popen([sys.executable, str(api_script)], stdout=None, stderr=None)
         os.execv(sys.executable, [sys.executable, str(server_script), *forward_args])
 
     venv_dir = Path(".venv")
@@ -73,6 +82,10 @@ def main():
     if not no_ingest and ingest_script.exists():
         print(f"Starting ingest service in background inside .venv: {ingest_script}")
         subprocess.Popen([str(venv_python), str(ingest_script)], stdout=None, stderr=None)
+    api_script = Path("server") / "api.py"
+    if not no_api and api_script.exists():
+        print(f"Starting API service in background inside .venv: {api_script}")
+        subprocess.Popen([str(venv_python), str(api_script)], stdout=None, stderr=None)
 
     os.execv(str(venv_python), [str(venv_python), str(server_script), *forward_args])
 

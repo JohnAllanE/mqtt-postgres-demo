@@ -48,6 +48,15 @@ def main():
     if forward_args and forward_args[0] == "--":
         forward_args = forward_args[1:]
 
+    # Default behavior: stream direct sensor data to local server and also
+    # publish MQTT messages locally for Phase 2 views.
+    if not forward_args:
+        forward_args = [
+            "--server-host", "localhost",
+            "--mqtt-host", "localhost",
+            "--maintenance-sensors", "0,1",
+        ]
+
     simulator_script = Path("gateway") / "simulator.py"
     if not simulator_script.exists():
         print("Error: gateway/simulator.py not found", file=sys.stderr)

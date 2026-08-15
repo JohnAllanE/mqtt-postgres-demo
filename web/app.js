@@ -1,5 +1,6 @@
 const NUM_SENSORS = 4;
 const MAX_POINTS = 40;
+const API_BASE = `${location.protocol}//${location.hostname}:8080`;
 
 const charts = [];
 
@@ -104,7 +105,7 @@ function startPolling(interval) {
   stopPolling();
   pollTimer = setInterval(async () => {
     try {
-      const res = await fetch('/api/recent?limit=10');
+      const res = await fetch(`${API_BASE}/api/recent?limit=60`);
       const data = await res.json();
       const tbody = document.querySelector('#logged-table tbody');
       tbody.innerHTML = '';
@@ -156,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('stop-poll').onclick = () => stopPolling();
   document.getElementById('reset-db').onclick = async () => {
     if (!confirm('Reset the database?')) return;
-    const res = await fetch('/api/reset-db', { method: 'POST' });
+    const res = await fetch(`${API_BASE}/api/reset-db`, { method: 'POST' });
     const j = await res.json();
     alert(JSON.stringify(j));
   };
@@ -164,10 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const sensors = document.getElementById('maintenance-sensors').value;
     const interval = parseFloat(document.getElementById('maintenance-interval').value) || 0.5;
     const body = { maintenance_sensors: sensors, maintenance_interval: interval };
-    const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(`${API_BASE}/api/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await res.json();
     alert('Config applied: ' + JSON.stringify(j));
   };
+
+  // start polling by default so logged charts populate automatically
+  startPolling(parseFloat(document.getElementById('poll-interval').value) || 1);
 });
 
 
