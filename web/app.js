@@ -81,8 +81,25 @@ function connect() {
   };
 }
 
-// Logged values polling
+// Logged values polling + charts
+const LOG_MAX_POINTS = 50;
 let pollTimer = null;
+let loggedChart6 = null;
+let loggedChart4 = null;
+
+function makeMultiSensorChart(ctx, sensorCount, title) {
+  const datasets = [];
+  for (let i = 0; i < sensorCount; i++) {
+    const hue = Math.round((i / Math.max(1, sensorCount)) * 360);
+    datasets.push({ label: `s${i}`, data: [], borderColor: `hsl(${hue} 70% 40%)`, pointRadius: 0 });
+  }
+  return new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets },
+    options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x: { display: false } } }
+  });
+}
+
 function startPolling(interval) {
   stopPolling();
   pollTimer = setInterval(async () => {
@@ -98,6 +115,10 @@ function startPolling(interval) {
         tr.appendChild(tdts); tr.appendChild(tdv);
         tbody.appendChild(tr);
       });
+      // update logged charts
+      if (loggedChart6 || loggedChart4) {
+        updateLoggedCharts(data || []);
+      }
     } catch (e) { console.error('poll error', e); }
   }, interval * 1000);
 }
@@ -122,6 +143,11 @@ function pushMaintenanceSample(sensorId, ts, value) {
 document.addEventListener('DOMContentLoaded', () => {
   createGrid();
   connect();
+  // create logged charts
+  const ctx6 = document.getElementById('logged-6-canvas').getContext('2d');
+  const ctx4 = document.getElementById('logged-4-canvas').getContext('2d');
+  loggedChart6 = makeMultiSensorChart(ctx6, 6, 'group-6');
+  loggedChart4 = makeMultiSensorChart(ctx4, 4, 'group-4');
 
   document.getElementById('start-poll').onclick = () => {
     const val = parseFloat(document.getElementById('poll-interval').value) || 1;
@@ -143,3 +169,28 @@ document.addEventListener('DOMContentLoaded', () => {
     alert('Config applied: ' + JSON.stringify(j));
   };
 });
+
+
+function updateLoggedCharts(rows) {
+  // rows are newest-first; make chronological
+  const chron = (rows || []).slice().reverse();
+  const rows6 = chron.filter(r => Array.isArray(r.values) && r.values.length === 6);
+  const rows4 = chron.filter(r => Array.isArray(r.values) && r.values.length === 4);
+
+  if (loggedChart6) {
+    // build datasets for each sensor
+    for (let i = 0; i < 6; i++) {
+      const dataPoints = rows6.map(r => ({ x: new Date(r.ts), y: r.values[i] }));
+      loggedChart6.data.datasets[i].data = dataPoints.slice(-LOG_MAX_POINTS);
+    }
+    loggedChart6.update('none');
+  }
+
+  if (loggedChart4) {
+    for (let i = 0; i < 4; i++) {
+      const dataPoints = rows4.map(r => ({ x: new Date(r.ts), y: r.values[i] }));
+      loggedChart4.data.datasets[i].data = dataPoints.slice(-LOG_MAX_POINTS);
+    }
+    loggedChart4.update('none');
+  }
+}
