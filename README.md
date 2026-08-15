@@ -4,21 +4,7 @@ This repository demonstrates a minimal end-to-end data flow: simulated IoT senso
 
 Development is organized into phases. Work only on items in the active phase.
 
-Backup: the previous project state is preserved on branch `backup-main-20260815-1038`.
-
-## Phase 1 — Minimum Viable Demo (High priority)
-
-Goal: produce a small, runnable demo that shows sensor data flowing from a simulator into storage and to a simple web UI.
-
-Checklist (Phase 1)
-
-- [ ] Sensor simulator (`gateway/`)
-	- Implement a Python script that simulates 10 sensors at 10 samples/second.
-	- Each sample should include three seeded sinusoidal components (low ≈0.01Hz, med ≈0.1Hz, high ≈1Hz) plus a DC offset.
-
-- [ ] Web UI (`web/`)
-	- Basic `index.html` + `app.js` showing a grid of small Chart.js plots (5 columns × 2 rows) with raw data streamed over WebSockets.
-	- The web app should connect to a lightweight WS endpoint that forwards recent samples for each sensor.
+Backup: the previous project is preserved on branch `backup-main-20260815-1038`.
 
 ## Quick Start (Minimal)
 
@@ -38,3 +24,34 @@ python3 -m http.server --directory web 8000
 ```
 
 Open http://localhost:8000 in your browser to view the live charts. Use Ctrl-C to stop the simulator and the static server.
+
+Recommended (easier): use the top-level helper scripts which auto-create/use the virtualenv and install requirements when needed.
+
+```bash
+# start the gateway simulator (auto venv)
+python3 start_gateway.py
+
+# start the web server (auto venv, default port 8000)
+python3 start_web.py
+
+# or specify a port for the web server
+python3 start_web.py 8080
+```
+
+Both scripts forward extra args to the underlying commands if needed. They share the repository `.venv` and `requirements.txt` (see notes below about environments).
+
+## Phase 1 — Minimum Viable Demo (High priority)
+
+Goal: produce a small, runnable demo that shows sensor data flowing from a simulator into storage and to a simple web UI.
+
+Checklist (Phase 1)
+
+- [ ] Sensor simulator (`gateway/`)
+	- Implement a Python script that simulates 10 sensors at 10 samples/second.
+	- Each sample should include three seeded sinusoidal components (low ≈0.01Hz, med ≈0.1Hz, high ≈1Hz) plus a DC offset.
+
+- [ ] Web UI (`web/`)
+	- Basic `index.html` + `app.js` showing a grid of small Chart.js plots (5 columns × 2 rows) with raw data streamed over WebSockets.
+	- The web app should connect to a lightweight WS endpoint that forwards recent samples for each sensor.
+
+
