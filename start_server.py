@@ -38,6 +38,11 @@ def main():
     forward_args = sys.argv[1:]
     if forward_args and forward_args[0] == "--":
         forward_args = forward_args[1:]
+    # helper options: allow skipping starting the ingest service
+    no_ingest = False
+    if "--no-ingest" in forward_args:
+        no_ingest = True
+        forward_args = [a for a in forward_args if a != "--no-ingest"]
 
     server_script = Path("server") / "server.py"
     if not server_script.exists():
@@ -46,6 +51,12 @@ def main():
 
     if in_venv():
         print("Virtualenv active — running server with current Python")
+        # start ingest in background (use current Python)
+        if not no_ingest:
+            ingest_script = Path("server") / "ingest.py"
+            if ingest_script.exists():
+                print(f"Starting ingest service in background: {ingest_script}")
+                subprocess.Popen([sys.executable, str(ingest_script)], stdout=None, stderr=None)
         os.execv(sys.executable, [sys.executable, str(server_script), *forward_args])
 
     venv_dir = Path(".venv")
@@ -57,6 +68,12 @@ def main():
         sys.exit(3)
 
     print("Launching server inside .venv")
+    # start ingest inside venv in background unless user opted out
+    ingest_script = Path("server") / "ingest.py"
+    if not no_ingest and ingest_script.exists():
+        print(f"Starting ingest service in background inside .venv: {ingest_script}")
+        subprocess.Popen([str(venv_python), str(ingest_script)], stdout=None, stderr=None)
+
     os.execv(str(venv_python), [str(venv_python), str(server_script), *forward_args])
 
 
