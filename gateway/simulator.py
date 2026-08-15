@@ -21,6 +21,12 @@ import random
 import time
 from typing import Optional
 
+# optional MQTT support
+try:
+    import paho.mqtt.client as mqtt
+except Exception:
+    mqtt = None
+
 NUM_SENSORS = 10
 SAMPLE_RATE = 10  # samples per second per sensor
 INTERVAL = 1.0 / SAMPLE_RATE
@@ -74,6 +80,46 @@ async def _send_loop_to_server(host: str, port: int, duration: Optional[float]):
             backoff = min(backoff * 2, 10)
 
 
+async def _mqtt_broadcast_loop(mqtt_client, host: str, port: int, broadcast_interval: float, duration: Optional[float], maintenance_cfg: dict):
+    sensors = [SensorModel(i + 1) for i in range(NUM_SENSORS)]
+    start = time.time()
+    while True:
+        t = time.time()
+        samples = [
+            {"sensor_id": i, "ts": int(t * 1000), "value": s.sample(t)}
+            for i, s in enumerate(sensors)
+        ]
+        message = json.dumps({"type": "broadcast", "samples": samples})
+        try:
+            mqtt_client.publish('sensors/broadcast', message)
+        except Exception as e:
+            print('MQTT publish error:', e)
+        if duration and (time.time() - start) >= duration:
+            return
+        await asyncio.sleep(broadcast_interval)
+
+
+async def _mqtt_maintenance_loop(mqtt_client, maintenance_interval: float, duration: Optional[float], maintenance_cfg: dict):
+    sensors = [SensorModel(i + 1) for i in range(NUM_SENSORS)]
+    start = time.time()
+    while True:
+        t = time.time()
+        selected = maintenance_cfg.get('sensors', [])
+        if selected:
+            samples = [
+                {"sensor_id": i, "ts": int(t * 1000), "value": sensors[i].sample(t)}
+                for i in selected if 0 <= i < len(sensors)
+            ]
+            message = json.dumps({"type": "maintenance", "samples": samples})
+            try:
+                mqtt_client.publish('sensors/maintenance', message)
+            except Exception as e:
+                print('MQTT publish error:', e)
+        if duration and (time.time() - start) >= duration:
+            return
+        await asyncio.sleep(maintenance_interval)
+
+
 async def _print_loop(duration: Optional[float]):
     sensors = [SensorModel(i + 1) for i in range(NUM_SENSORS)]
     start = time.time()
@@ -95,12 +141,44 @@ def main():
     parser.add_argument("--server-host", type=str, default=None, help="TCP server to send data to")
     parser.add_argument("--server-port", type=int, default=9999, help="TCP server port")
     parser.add_argument("--duration", type=float, default=None, help="seconds to run (default: forever)")
+    parser.add_argument("--mqtt-host", type=str, default=None, help="MQTT broker host to publish to (optional)")
+    parser.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
+    parser.add_argument("--broadcast-interval", type=float, default=1.0, help="seconds between MQTT broadcast messages (default 1.0)")
+    parser.add_argument("--maintenance-interval", type=float, default=0.5, help="seconds between maintenance MQTT messages (default 0.5 => 2Hz)")
+    parser.add_argument("--maintenance-sensors", type=str, default="", help="comma-separated sensor ids for maintenance mode (0-based)")
     args = parser.parse_args()
 
-    if args.server_host:
-        asyncio.run(_send_loop_to_server(args.server_host, args.server_port, args.duration))
-    else:
-        asyncio.run(_print_loop(args.duration))
+    # Prepare optional MQTT client
+    mqtt_client = None
+    maintenance_cfg = {'sensors': []}
+    if args.maintenance_sensors:
+        try:
+            maintenance_cfg['sensors'] = [int(x) for x in args.maintenance_sensors.split(',') if x.strip()!='']
+        except Exception:
+            maintenance_cfg['sensors'] = []
+
+    async def _run_all():
+        tasks = []
+        if args.server_host:
+            tasks.append(asyncio.create_task(_send_loop_to_server(args.server_host, args.server_port, args.duration)))
+        else:
+            tasks.append(asyncio.create_task(_print_loop(args.duration)))
+
+        # MQTT: connect and run publisher tasks if requested
+        if args.mqtt_host and mqtt is not None:
+            client = mqtt.Client()
+            try:
+                client.connect(args.mqtt_host, args.mqtt_port, 60)
+                client.loop_start()
+                tasks.append(asyncio.create_task(_mqtt_broadcast_loop(client, args.mqtt_host, args.mqtt_port, args.broadcast_interval, args.duration, maintenance_cfg)))
+                tasks.append(asyncio.create_task(_mqtt_maintenance_loop(client, args.maintenance_interval, args.duration, maintenance_cfg)))
+            except Exception as e:
+                print('Could not start MQTT client:', e)
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
+    asyncio.run(_run_all())
 
 
 if __name__ == "__main__":
