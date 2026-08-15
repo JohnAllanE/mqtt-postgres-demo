@@ -109,16 +109,7 @@ function startPolling(interval) {
     try {
       const res = await fetch(`${API_BASE}/api/recent?limit=60`);
       const data = await res.json();
-      const tbody = document.querySelector('#logged-table tbody');
-      tbody.innerHTML = '';
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        const tdts = document.createElement('td'); tdts.textContent = row.ts;
-        const tdv = document.createElement('td'); tdv.textContent = (row.values || []).join(', ');
-        tr.appendChild(tdts); tr.appendChild(tdv);
-        tbody.appendChild(tr);
-      });
-      // update logged charts
+      // update logged charts with returned rows
       if (loggedChart6 || loggedChart4) {
         updateLoggedCharts(data || []);
       }
