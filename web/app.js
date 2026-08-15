@@ -1,5 +1,7 @@
 const NUM_SENSORS = 10;
-const MAX_POINTS = 200;
+// display window in milliseconds (e.g. 2000 = last 2 seconds)
+const DISPLAY_WINDOW_MS = 2000;
+const MAX_POINTS = 200; // safety cap
 
 const charts = [];
 
@@ -49,10 +51,27 @@ function pushSample(sensorId, ts, value) {
   const chart = charts[sensorId];
   if (!chart) return;
   const ds = chart.data.datasets[0];
-  ds.data.push({ x: ts, y: value });
-  if (ds.data.length > MAX_POINTS) ds.data.shift();
+  const t = (ts instanceof Date) ? ts.getTime() : Number(ts);
+  ds.data.push({ x: t, y: value });
+
+  const cutoff = Date.now() - DISPLAY_WINDOW_MS;
+  // trim to keep only recent points and also respect MAX_POINTS as a hard cap
+  const filtered = ds.data.filter(d => d.x >= cutoff);
+  if (filtered.length > MAX_POINTS) {
+    // keep the most recent MAX_POINTS
+    ds.data = filtered.slice(-MAX_POINTS);
+  } else {
+    ds.data = filtered;
+  }
+
   // update labels to match point count (not used visually)
-  chart.data.labels = ds.data.map((d) => '');
+  chart.data.labels = ds.data.map(() => '');
+  // update x axis viewport (optional)
+  if (!chart.options.scales) chart.options.scales = {};
+  if (!chart.options.scales.x) chart.options.scales.x = {};
+  chart.options.scales.x.min = cutoff;
+  chart.options.scales.x.max = Date.now();
+
   chart.update('none');
 }
 
