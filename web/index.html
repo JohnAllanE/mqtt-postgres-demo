@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MQTT-Postgres Demo — Phase 1</title>
+    <style>
+      body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+      .chart-card { background: #fff; border: 1px solid #eee; padding: 8px; }
+      .chart-title { font-size: 12px; margin-bottom: 6px; }
+      canvas { width: 100% !important; height: 120px !important; }
+    </style>
+  </head>
+  <body>
+    <h1>Phase 1 — Sensor Live View</h1>
+    <p>Minimal web UI displaying raw sensor values streamed over WebSockets.</p>
+
+    <section class="grid" id="charts"></section>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
