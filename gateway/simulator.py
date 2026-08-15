@@ -68,7 +68,16 @@ async def broadcaster():
         message = json.dumps({"type": "batch", "samples": samples})
 
         if clients:
-            await asyncio.wait([c.send(message) for c in clients])
+            # send concurrently and handle per-client errors so one bad socket
+            # doesn't cancel other sends. Use a snapshot of clients to avoid
+            # mutation during iteration.
+            async def _safe_send(c):
+                try:
+                    await c.send(message)
+                except Exception:
+                    clients.discard(c)
+
+            await asyncio.gather(*( _safe_send(c) for c in list(clients) ), return_exceptions=True)
 
         await asyncio.sleep(INTERVAL)
 
