@@ -30,6 +30,7 @@ except Exception:
 NUM_SENSORS = 10
 SAMPLE_RATE = 10  # samples per second per sensor
 INTERVAL = 1.0 / SAMPLE_RATE
+MIN_INTERVAL = 0.5
 
 
 class SensorModel:
@@ -83,6 +84,11 @@ async def _send_loop_to_server(host: str, port: int, duration: Optional[float]):
 async def _mqtt_broadcast_loop(mqtt_client, host: str, port: int, broadcast_interval: float, duration: Optional[float], maintenance_cfg: dict):
     sensors = [SensorModel(i + 1) for i in range(NUM_SENSORS)]
     start = time.time()
+    config_event = maintenance_cfg.get('config_event')
+
+    def current_interval() -> float:
+        return max(MIN_INTERVAL, float(maintenance_cfg.get('broadcast_interval', broadcast_interval)))
+
     while True:
         t = time.time()
         samples = [
@@ -96,12 +102,28 @@ async def _mqtt_broadcast_loop(mqtt_client, host: str, port: int, broadcast_inte
             print('MQTT publish error:', e)
         if duration and (time.time() - start) >= duration:
             return
-        await asyncio.sleep(max(0.05, float(maintenance_cfg.get('broadcast_interval', broadcast_interval))))
+
+        while True:
+            interval = current_interval()
+            if config_event is None:
+                await asyncio.sleep(interval)
+                break
+            try:
+                await asyncio.wait_for(config_event.wait(), timeout=interval)
+                config_event.clear()
+                continue
+            except asyncio.TimeoutError:
+                break
 
 
 async def _mqtt_maintenance_loop(mqtt_client, maintenance_interval: float, duration: Optional[float], maintenance_cfg: dict):
     sensors = [SensorModel(i + 1) for i in range(NUM_SENSORS)]
     start = time.time()
+    config_event = maintenance_cfg.get('config_event')
+
+    def current_interval() -> float:
+        return max(MIN_INTERVAL, float(maintenance_cfg.get('maintenance_interval', maintenance_interval)))
+
     while True:
         t = time.time()
         selected = maintenance_cfg.get('sensors', [])
@@ -117,7 +139,18 @@ async def _mqtt_maintenance_loop(mqtt_client, maintenance_interval: float, durat
                 print('MQTT publish error:', e)
         if duration and (time.time() - start) >= duration:
             return
-        await asyncio.sleep(max(0.05, float(maintenance_cfg.get('maintenance_interval', maintenance_interval))))
+
+        while True:
+            interval = current_interval()
+            if config_event is None:
+                await asyncio.sleep(interval)
+                break
+            try:
+                await asyncio.wait_for(config_event.wait(), timeout=interval)
+                config_event.clear()
+                continue
+            except asyncio.TimeoutError:
+                break
 
 
 async def _print_loop(duration: Optional[float]):
@@ -143,14 +176,18 @@ def main():
     parser.add_argument("--duration", type=float, default=None, help="seconds to run (default: forever)")
     parser.add_argument("--mqtt-host", type=str, default=None, help="MQTT broker host to publish to (optional)")
     parser.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
-    parser.add_argument("--broadcast-interval", type=float, default=1.0, help="seconds between MQTT broadcast messages (default 1.0)")
-    parser.add_argument("--maintenance-interval", type=float, default=0.5, help="seconds between maintenance MQTT messages (default 0.5 => 2Hz)")
+    parser.add_argument("--broadcast-interval", type=float, default=1.0, help="seconds between MQTT broadcast messages (default 1.0, min 0.5)")
+    parser.add_argument("--maintenance-interval", type=float, default=0.5, help="seconds between maintenance MQTT messages (default 0.5, min 0.5)")
     parser.add_argument("--maintenance-sensors", type=str, default="", help="comma-separated sensor ids for maintenance mode (0-based)")
     args = parser.parse_args()
 
     # Prepare optional MQTT client
     mqtt_client = None
-    maintenance_cfg = {'sensors': [], 'broadcast_interval': args.broadcast_interval, 'maintenance_interval': args.maintenance_interval}
+    maintenance_cfg = {
+        'sensors': [],
+        'broadcast_interval': max(MIN_INTERVAL, float(args.broadcast_interval)),
+        'maintenance_interval': max(MIN_INTERVAL, float(args.maintenance_interval)),
+    }
     if args.maintenance_sensors:
         try:
             maintenance_cfg['sensors'] = [int(x) for x in args.maintenance_sensors.split(',') if x.strip()!='']
@@ -158,6 +195,9 @@ def main():
             maintenance_cfg['sensors'] = []
 
     async def _run_all():
+        loop = asyncio.get_running_loop()
+        config_event = asyncio.Event()
+        maintenance_cfg['config_event'] = config_event
         tasks = []
         if args.server_host:
             tasks.append(asyncio.create_task(_send_loop_to_server(args.server_host, args.server_port, args.duration)))
@@ -166,7 +206,7 @@ def main():
 
         # MQTT: connect and run publisher tasks if requested
         if args.mqtt_host and mqtt is not None:
-            client = mqtt.Client()
+            client = mqtt.Client(userdata={'loop': loop, 'config_event': config_event})
             def _on_config(_client, _userdata, msg):
                 try:
                     data = json.loads(msg.payload.decode('utf-8'))
@@ -174,12 +214,12 @@ def main():
                     return
                 if 'maintenance_interval' in data:
                     try:
-                        maintenance_cfg['maintenance_interval'] = float(data['maintenance_interval'])
+                        maintenance_cfg['maintenance_interval'] = max(MIN_INTERVAL, float(data['maintenance_interval']))
                     except Exception:
                         pass
                 if 'broadcast_interval' in data:
                     try:
-                        maintenance_cfg['broadcast_interval'] = float(data['broadcast_interval'])
+                        maintenance_cfg['broadcast_interval'] = max(MIN_INTERVAL, float(data['broadcast_interval']))
                     except Exception:
                         pass
                 if 'maintenance_sensors' in data:
@@ -193,6 +233,15 @@ def main():
                         maintenance_cfg['sensors'] = [int(x) for x in parsed]
                     except Exception:
                         pass
+                print(
+                    'Applied config from MQTT:',
+                    {
+                        'broadcast_interval': maintenance_cfg['broadcast_interval'],
+                        'maintenance_interval': maintenance_cfg['maintenance_interval'],
+                        'maintenance_sensors': maintenance_cfg['sensors'],
+                    },
+                )
+                loop.call_soon_threadsafe(config_event.set)
 
             client.on_message = _on_config
             try:

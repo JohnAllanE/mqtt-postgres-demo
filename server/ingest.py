@@ -89,10 +89,16 @@ def main():
         with open(os.path.join(os.path.dirname(__file__), 'schema.sql')) as fh:
             c.execute(fh.read())
         try:
-            with open(os.path.join(os.path.dirname(__file__), 'seed.sql')) as fh:
-                c.execute(fh.read())
-        except FileNotFoundError:
-            pass
+            c.execute('SELECT COUNT(*) FROM equipment_type')
+            equipment_count = c.fetchone()[0]
+        except Exception:
+            equipment_count = 0
+        if equipment_count == 0:
+            try:
+                with open(os.path.join(os.path.dirname(__file__), 'seed.sql')) as fh:
+                    c.execute(fh.read())
+            except FileNotFoundError:
+                pass
 
     client = mqtt.Client(userdata={'db': conn})
     client.user_data_set({'db': conn})

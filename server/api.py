@@ -15,6 +15,7 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgres://demo:demo@localhost:5432/demo')
 MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+MIN_INTERVAL = 0.5
 
 
 def connect_db():
@@ -27,6 +28,13 @@ def connect_db():
         port=url.port or 5432,
     )
     return conn
+
+
+def clamp_interval(value):
+    try:
+        return max(MIN_INTERVAL, float(value))
+    except Exception:
+        return MIN_INTERVAL
 
 
 @app.after_request
@@ -66,6 +74,7 @@ def reset_db():
         with conn.cursor() as cur:
             with open(schema, 'r', encoding='utf-8') as fh:
                 cur.execute(fh.read())
+            cur.execute('TRUNCATE TABLE sensor_data, equipment_type RESTART IDENTITY CASCADE')
             with open(seed, 'r', encoding='utf-8') as fh:
                 cur.execute(fh.read())
         conn.close()
@@ -79,12 +88,21 @@ def config():
     # Accepts JSON with keys like: maintenance_interval, broadcast_interval,
     # maintenance_sensors (comma string or list[int])
     data = request.get_json() or {}
+    if 'broadcast_interval' in data:
+        data['broadcast_interval'] = clamp_interval(data['broadcast_interval'])
+    if 'maintenance_interval' in data:
+        data['maintenance_interval'] = clamp_interval(data['maintenance_interval'])
     # Publish config over MQTT so simulators can apply changes live.
+    if mqtt is None:
+        return jsonify({'ok': False, 'error': 'paho-mqtt is not available in the API environment'}), 500
     if mqtt is not None:
         try:
             client = mqtt.Client()
             client.connect(MQTT_HOST, MQTT_PORT, 60)
-            client.publish('sensors/config', json.dumps(data))
+            client.loop_start()
+            info = client.publish('sensors/config', json.dumps(data), retain=True)
+            info.wait_for_publish()
+            client.loop_stop()
             client.disconnect()
         except Exception as e:
             return jsonify({'ok': False, 'error': f'mqtt publish failed: {e}'}), 500

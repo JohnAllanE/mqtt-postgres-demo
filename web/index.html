@@ -7,9 +7,9 @@
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; }
       .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-      .chart-card { background: #fff; border: 1px solid #eee; padding: 8px; }
+      .chart-card { background: #fff; border: 1px solid #eee; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
       .chart-title { font-size: 12px; margin-bottom: 6px; }
-      canvas { width: 100% !important; height: 120px !important; }
+      canvas { width: 100% !important; height: 100% !important; display: block; flex: 1 1 auto; min-height: 0; }
     </style>
   </head>
   <body>
@@ -20,11 +20,11 @@
 
     <h2>Logged Sensor Values (Phase 2)</h2>
     <div>
-      Poll interval (s): <input id="poll-interval" type="number" value="1" min="0.1" step="0.1" />
-      <button id="start-poll">Start Polling</button>
-      <button id="stop-poll">Stop</button>
+      Poll interval (s): <input id="poll-interval" type="number" value="1" min="0.5" step="0.1" />
+      <button id="apply-poll-config">Apply Config</button>
       <button id="reset-db">Reset DB</button>
     </div>
+    <div id="ui-status" style="margin: 6px 0 0; font-size: 12px; color: #555;"></div>
     <div id="logged-values">
       <!-- Logged values charts shown below; textual table removed -->
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -41,12 +41,49 @@
 
     <h2>Maintenance Mode</h2>
     <div>
-      Select sensors (comma-separated 0-based): <input id="maintenance-sensors" type="text" value="0,1" />
-      Broadcast interval (s): <input id="maintenance-interval" type="number" value="0.5" step="0.1" />
+      Select sensors (comma-separated 0-based): <input id="maintenance-sensors" type="text" value="1" />
+      Broadcast interval (s): <input id="maintenance-interval" type="number" value="0.5" min="0.5" step="0.1" />
       <button id="apply-config">Apply Config</button>
+      <button id="reset-maintenance">Reset Chart</button>
     </div>
     <div class="chart-card">
       <canvas id="maintenance-canvas"></canvas>
+    </div>
+
+    <h2>Recent MQTT Messages</h2>
+    <section class="grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
+      <div class="chart-card">
+        <div class="chart-title">Broadcast</div>
+        <pre id="topic-broadcast" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Maintenance-mode</div>
+        <pre id="topic-maintenance" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Config</div>
+        <pre id="topic-config" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
+      </div>
+    </section>
+
+    <h2>PostgreSQL Snapshot (sensor_data)</h2>
+    <div class="chart-card" style="margin-top: 8px;">
+      <div style="overflow-x: auto;">
+        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr>
+              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">ts</th>
+              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">array_length</th>
+              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">values (Postgres array)</th>
+            </tr>
+          </thead>
+          <tbody id="db-snapshot-body">
+            <tr>
+              <td colspan="3" style="padding:6px; color:#666;">Waiting for data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

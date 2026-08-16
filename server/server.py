@@ -60,9 +60,14 @@ def _mqtt_on_message(client, userdata, msg):
     loop = userdata.get('loop') if isinstance(userdata, dict) else None
     if loop is None:
         return
+    try:
+        parsed = json.loads(payload) if payload else payload
+    except Exception:
+        parsed = payload
+    wrapped = json.dumps({'topic': msg.topic, 'payload': parsed})
     # schedule broadcast on the asyncio loop
     try:
-        asyncio.run_coroutine_threadsafe(broadcast(payload), loop)
+        asyncio.run_coroutine_threadsafe(broadcast(wrapped), loop)
     except Exception:
         pass
 
@@ -78,6 +83,7 @@ def start_mqtt_bridge(loop):
         client.connect(MQTT_HOST, MQTT_PORT, 60)
         client.subscribe('sensors/maintenance')
         client.subscribe('sensors/broadcast')
+        client.subscribe('sensors/config')
         client.loop_start()
         _mqtt_client = client
         print(f'MQTT bridge connected to {MQTT_HOST}:{MQTT_PORT} and forwarding topics to websockets')
