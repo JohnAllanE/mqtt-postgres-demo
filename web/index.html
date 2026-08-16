@@ -3,88 +3,302 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MQTT-Postgres Demo — Phase 1</title>
+    <title>MQTT-Postgres Demo — Sensor Live View</title>
     <style>
-      body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; }
-      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-      .chart-card { background: #fff; border: 1px solid #eee; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
-      .chart-title { font-size: 12px; margin-bottom: 6px; }
-      canvas { width: 100% !important; height: 100% !important; display: block; flex: 1 1 auto; min-height: 0; }
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+      :root {
+        --bg: #f5f7fb;
+        --surface: #ffffff;
+        --surface-soft: #f9fbff;
+        --text: #1e2430;
+        --muted: #5e6a82;
+        --line: #dfe5f0;
+        --accent: #1f78d1;
+        --shadow: 0 10px 30px rgba(20, 34, 66, 0.08);
+        --radius: 14px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
+        background:
+          radial-gradient(1200px 420px at 10% -10%, #deecff 0%, transparent 55%),
+          radial-gradient(900px 360px at 95% -15%, #ffe9d8 0%, transparent 60%),
+          var(--bg);
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px 20px 44px;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: 'Fraunces', serif;
+        font-size: clamp(1.7rem, 1.4rem + 1.2vw, 2.35rem);
+        font-weight: 650;
+        line-height: 1.1;
+      }
+
+      .lede {
+        margin: 10px 0 0;
+        max-width: 74ch;
+        color: var(--muted);
+        font-size: 1.03rem;
+      }
+
+      h2 {
+        margin: 28px 0 10px;
+        font-family: 'Fraunces', serif;
+        font-size: 1.28rem;
+        font-weight: 500;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .chart-card,
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .chart-card {
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .chart-title {
+        margin-bottom: 8px;
+        color: #33405a;
+        letter-spacing: 0.02em;
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+      }
+
+      canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .controls {
+        margin-top: 8px;
+        padding: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 12px;
+        align-items: center;
+      }
+
+      .controls label {
+        font-size: 0.92rem;
+        color: #3f4d68;
+      }
+
+      input,
+      button {
+        border-radius: 9px;
+        border: 1px solid #ccd7ea;
+        font: inherit;
+      }
+
+      input {
+        height: 34px;
+        padding: 0 10px;
+        min-width: 100px;
+        background: #fff;
+      }
+
+      button {
+        height: 34px;
+        padding: 0 12px;
+        background: var(--surface-soft);
+        color: #28436b;
+        cursor: pointer;
+        transition: background 150ms ease, border-color 150ms ease;
+      }
+
+      button:hover {
+        background: #edf4ff;
+        border-color: #b7c8e8;
+      }
+
+      .status {
+        margin: 8px 2px 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .two-up {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .mqtt-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      pre {
+        margin: 0;
+        padding: 10px;
+        min-height: 150px;
+        border-radius: 10px;
+        background: #f8faff;
+        border: 1px solid #e6edf8;
+        color: #2b3a55;
+        font-size: 0.8rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border-radius: 11px;
+        border: 1px solid #e6edf8;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        background: #fff;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid #eef2f8;
+        vertical-align: top;
+      }
+
+      th {
+        color: #3b4864;
+        font-weight: 600;
+        background: #f8faff;
+      }
+
+      @media (max-width: 1100px) {
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mqtt-grid { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 760px) {
+        .page { padding: 18px 12px 30px; }
+        .two-up { grid-template-columns: 1fr; }
+        .grid { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
-    <h1>Phase 1 — Sensor Live View</h1>
-    <p>Minimal web UI displaying raw sensor values streamed over WebSockets.</p>
+    <main class="page">
+      <h1>Sensor Live View</h1>
+      <p class="lede">This page provides live and logged views for the simulated sensors, MQTT payloads, and the PostgreSQL array snapshot used by this demo.</p>
+      <p class="status">Sensor live view — this is a direct WebSocket feed from the simulated sensors, provided for immediate context.</p>
 
-    <section class="grid" id="charts"></section>
+      <section class="grid" id="charts"></section>
 
-    <h2>Logged Sensor Values (Phase 2)</h2>
-    <div>
-      Poll interval (s): <input id="poll-interval" type="number" value="1" min="0.5" step="0.1" />
-      <button id="apply-poll-config">Apply Config</button>
-      <button id="reset-db">Reset DB</button>
-    </div>
-    <div id="ui-status" style="margin: 6px 0 0; font-size: 12px; color: #555;"></div>
-    <div id="logged-values">
-      <!-- Logged values charts shown below; textual table removed -->
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <div class="chart-card" style="flex:1">
+      <h2>Logged Sensor Values</h2>
+      <section class="panel controls">
+        <label>
+          Poll interval (s)
+          <input id="poll-interval" type="number" value="3" min="0.5" step="0.1" />
+        </label>
+        <button id="apply-poll-config">Apply Config</button>
+        <button id="reset-db">Reset DB</button>
+      </section>
+      <div id="ui-status" class="status"></div>
+
+      <p class="status">The polling interval sets how often the gateway sends data for ingestion into the PostgreSQL database. Use the "Reset DB" button to remove old values. If you change the polling interval, click "Apply Config" to send the update to the simulated gateway via an MQTT configuration message. The charts below display data plotted from the database (after ingestion) and are clustered into two equipment types.</p>
+
+      <section id="logged-values" class="two-up">
+        <div class="chart-card">
           <div class="chart-title">Logged — group-6 (6 sensors)</div>
           <canvas id="logged-6-canvas"></canvas>
         </div>
-        <div class="chart-card" style="flex:1">
+        <div class="chart-card">
           <div class="chart-title">Logged — group-4 (4 sensors)</div>
           <canvas id="logged-4-canvas"></canvas>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <h2>Maintenance Mode</h2>
-    <div>
-      Select sensors (comma-separated 0-based): <input id="maintenance-sensors" type="text" value="1" />
-      Broadcast interval (s): <input id="maintenance-interval" type="number" value="0.5" min="0.5" step="0.1" />
-      <button id="apply-config">Apply Config</button>
-      <button id="reset-maintenance">Reset Chart</button>
-    </div>
-    <div class="chart-card">
-      <canvas id="maintenance-canvas"></canvas>
-    </div>
+      <h2>Maintenance Mode</h2>
+      <p class="status">The higher-frequency maintenance plot shows values received over MQTT without committing them to the database. Specify sensor IDs (0-based) to request maintenance samples from the gateway; those IDs are sent as an MQTT configuration message.</p>
+      <section class="panel controls">
+        <label>
+          Select sensors (comma-separated 0-based)
+          <input id="maintenance-sensors" type="text" value="1" />
+        </label>
+        <label>
+          Broadcast interval (s)
+          <input id="maintenance-interval" type="number" value="0.5" min="0.5" step="0.1" />
+        </label>
+        <button id="apply-config">Apply Config</button>
+        <button id="reset-maintenance">Reset Chart</button>
+      </section>
+      <div class="chart-card" style="margin-top: 10px;">
+        <canvas id="maintenance-canvas"></canvas>
+      </div>
 
-    <h2>Recent MQTT Messages</h2>
-    <section class="grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
-      <div class="chart-card">
-        <div class="chart-title">Broadcast</div>
-        <pre id="topic-broadcast" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Maintenance-mode</div>
-        <pre id="topic-maintenance" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Config</div>
-        <pre id="topic-config" style="white-space: pre-wrap; margin: 0; font-size: 12px; min-height: 140px;"></pre>
-      </div>
-    </section>
+      <h2>Recent MQTT Messages</h2>
+      <p class="status">The three panels below show the latest message for each of the three MQTT topics used by this demo.</p>
+      <section class="mqtt-grid">
+        <div class="chart-card">
+          <div class="chart-title">Broadcast</div>
+          <pre id="topic-broadcast"></pre>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Maintenance-mode</div>
+          <pre id="topic-maintenance"></pre>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Config</div>
+          <pre id="topic-config"></pre>
+        </div>
+      </section>
 
-    <h2>PostgreSQL Snapshot (sensor_data)</h2>
-    <div class="chart-card" style="margin-top: 8px;">
-      <div style="overflow-x: auto;">
-        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
-          <thead>
-            <tr>
-              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">ts</th>
-              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">array_length</th>
-              <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px;">values (Postgres array)</th>
-            </tr>
-          </thead>
-          <tbody id="db-snapshot-body">
-            <tr>
-              <td colspan="3" style="padding:6px; color:#666;">Waiting for data...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <h2>PostgreSQL Snapshot (sensor_data)</h2>
+      <p class="status">The table below shows the state of the actual sensor value database, demonstrating the use of variable-length arrays in the stored `values` column.</p>
+      <section class="chart-card" style="margin-top: 10px;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ts</th>
+                <th>array_length</th>
+                <th>values (Postgres array)</th>
+              </tr>
+            </thead>
+            <tbody id="db-snapshot-body">
+              <tr>
+                <td colspan="3" style="color: #5f6c84;">Waiting for data...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>

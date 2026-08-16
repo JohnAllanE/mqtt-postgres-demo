@@ -1,4 +1,4 @@
-const NUM_SENSORS = 4;
+const NUM_SENSORS = 10;
 const API_BASE = `${location.protocol}//${location.hostname}:8080`;
 
 const CHART_CONFIG = {
@@ -22,6 +22,10 @@ const CHART_CONFIG = {
     height: '10cm',
     yMin: -2.5,
     yMax: 2.5,
+    lineTension: 0.5,
+    interpolation: 'monotone',
+    animationDurationMs: 260,
+    animationEasing: 'easeOutQuad',
   },
 };
 const DB_SNAPSHOT_LIMIT = 20;
@@ -324,6 +328,8 @@ function maintenanceDatasetForSensor(sensorId) {
     data: [],
     borderColor: `hsl(${hue} 70% 40%)`,
     pointRadius: 0,
+    tension: CHART_CONFIG.maintenance.lineTension,
+    cubicInterpolationMode: CHART_CONFIG.maintenance.interpolation,
   };
   maintenanceDatasetsBySensor.set(sensorId, dataset);
   maintenanceChart.data.datasets.push(dataset);
@@ -342,7 +348,7 @@ function pushMaintenanceSample(sensorId, ts, value) {
   dataset.data.push({ x: ts.getTime ? ts.getTime() : ts, y: value });
   if (dataset.data.length > CHART_CONFIG.maintenance.maxPoints) dataset.data.shift();
   setChartWindow(maintenanceChart, ts, CHART_CONFIG.maintenance.windowSeconds);
-  maintenanceChart.update('none');
+  maintenanceChart.update();
 }
 
 function updateLoggedCharts(rows) {
@@ -393,7 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
     type: 'line',
     data: { datasets: [] },
     options: {
-      animation: false,
+      animation: {
+        duration: CHART_CONFIG.maintenance.animationDurationMs,
+        easing: CHART_CONFIG.maintenance.animationEasing,
+      },
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,

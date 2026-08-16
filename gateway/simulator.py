@@ -64,7 +64,7 @@ async def _send_loop_to_server(host: str, port: int, duration: Optional[float]):
             while True:
                 t = time.time()
                 samples = [
-                    {"sensor_id": i, "ts": int(t * 1000), "value": s.sample(t)}
+                    {"sensor_id": i, "ts": int(t * 1000), "value": round(s.sample(t), 4)}
                     for i, s in enumerate(sensors)
                 ]
                 message = json.dumps({"type": "batch", "samples": samples}) + "\n"
@@ -92,7 +92,7 @@ async def _mqtt_broadcast_loop(mqtt_client, host: str, port: int, broadcast_inte
     while True:
         t = time.time()
         samples = [
-            {"sensor_id": i, "ts": int(t * 1000), "value": s.sample(t)}
+            {"sensor_id": i, "ts": int(t * 1000), "value": round(s.sample(t), 4)}
             for i, s in enumerate(sensors)
         ]
         message = json.dumps({"type": "broadcast", "samples": samples})
@@ -129,7 +129,7 @@ async def _mqtt_maintenance_loop(mqtt_client, maintenance_interval: float, durat
         selected = maintenance_cfg.get('sensors', [])
         if selected:
             samples = [
-                {"sensor_id": i, "ts": int(t * 1000), "value": sensors[i].sample(t)}
+                {"sensor_id": i, "ts": int(t * 1000), "value": round(sensors[i].sample(t), 4)}
                 for i in selected if 0 <= i < len(sensors)
             ]
             message = json.dumps({"type": "maintenance", "samples": samples})
@@ -159,7 +159,7 @@ async def _print_loop(duration: Optional[float]):
     while True:
         t = time.time()
         samples = [
-            {"sensor_id": i, "ts": int(t * 1000), "value": s.sample(t)}
+            {"sensor_id": i, "ts": int(t * 1000), "value": round(s.sample(t), 4)}
             for i, s in enumerate(sensors)
         ]
         message = json.dumps({"type": "batch", "samples": samples})
