@@ -4,6 +4,15 @@ import os
 import psycopg2
 from urllib.parse import urlparse
 import json
+import threading
+
+from load_test import (
+    benchmark_variants,
+    get_stats,
+    reset_variants,
+    seed_variants,
+    validate_sample_count,
+)
 
 try:
     import paho.mqtt.client as mqtt
@@ -16,6 +25,8 @@ DATABASE_URL = os.environ.get('DATABASE_URL', 'postgres://demo:demo@localhost:54
 MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
 MIN_INTERVAL = 0.5
+load_test_lock = threading.Lock()
+load_test_state = {'running': False, 'phase': 'idle', 'error': None}
 
 
 def connect_db():
@@ -28,6 +39,13 @@ def connect_db():
         port=url.port or 5432,
     )
     return conn
+
+
+def ensure_schema(conn):
+    with open(os.path.join(os.path.dirname(__file__), 'schema.sql'), encoding='utf-8') as fh:
+        with conn.cursor() as cur:
+            cur.execute(fh.read())
+    conn.commit()
 
 
 def clamp_interval(value):
@@ -81,6 +99,104 @@ def reset_db():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
     return jsonify({'ok': True})
+
+
+def run_load_test_seed(sample_count):
+    conn = None
+    try:
+        conn = connect_db()
+        ensure_schema(conn)
+
+        def progress(phase):
+            with load_test_lock:
+                load_test_state['phase'] = phase
+
+        result = seed_variants(conn, sample_count, progress)
+        with load_test_lock:
+            load_test_state.update(result)
+            load_test_state.update({'running': False, 'phase': 'complete', 'error': None})
+    except Exception as exc:
+        if conn:
+            conn.rollback()
+        with load_test_lock:
+            load_test_state.update({'running': False, 'phase': 'failed', 'error': str(exc)})
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/api/test-db/seed', methods=['POST'])
+def seed_test_db():
+    data = request.get_json(silent=True) or {}
+    try:
+        sample_count = validate_sample_count(data.get('sample_count', 1_000_000))
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    with load_test_lock:
+        if load_test_state['running']:
+            return jsonify({'ok': False, 'error': 'a seed job is already running'}), 409
+        load_test_state.clear()
+        load_test_state.update({
+            'running': True,
+            'phase': 'starting',
+            'error': None,
+            'sample_count': sample_count,
+        })
+    threading.Thread(target=run_load_test_seed, args=(sample_count,), daemon=True).start()
+    return jsonify({'ok': True, 'sample_count': sample_count}), 202
+
+
+@app.route('/api/test-db/status')
+def test_db_status():
+    with load_test_lock:
+        state = dict(load_test_state)
+    if state.get('running'):
+        return jsonify({'ok': True, **state})
+    try:
+        conn = connect_db()
+        ensure_schema(conn)
+        stats = get_stats(conn)
+        conn.close()
+        return jsonify({'ok': True, **state, **stats})
+    except Exception as exc:
+        return jsonify({'ok': False, **state, 'error': str(exc)}), 500
+
+
+@app.route('/api/test-db/benchmark', methods=['POST'])
+def benchmark_test_db():
+    with load_test_lock:
+        if load_test_state['running']:
+            return jsonify({'ok': False, 'error': 'wait for the seed job to finish'}), 409
+    try:
+        conn = connect_db()
+        ensure_schema(conn)
+        stats = get_stats(conn)
+        if not stats['sample_count']:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'seed the test database first'}), 400
+        results = benchmark_variants(conn)
+        conn.close()
+        return jsonify({'ok': True, 'results': results})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/test-db/reset', methods=['POST'])
+def reset_test_db():
+    with load_test_lock:
+        if load_test_state['running']:
+            return jsonify({'ok': False, 'error': 'wait for the seed job to finish'}), 409
+    try:
+        conn = connect_db()
+        ensure_schema(conn)
+        reset_variants(conn)
+        conn.close()
+        with load_test_lock:
+            load_test_state.clear()
+            load_test_state.update({'running': False, 'phase': 'idle', 'error': None})
+        return jsonify({'ok': True})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 @app.route('/api/config', methods=['POST'])
