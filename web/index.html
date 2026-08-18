@@ -159,6 +159,69 @@
         margin-top: 10px;
       }
 
+      .variant-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .metric-card {
+        padding: 14px;
+      }
+
+      .metric-value {
+        margin-top: 5px;
+        font-family: 'Fraunces', serif;
+        font-size: 1.45rem;
+        color: #183b67;
+      }
+
+      .metric-detail {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .metric-fit {
+        margin-top: 9px;
+        padding-top: 9px;
+        border-top: 1px solid var(--line);
+        color: #33405a;
+        font-size: 0.86rem;
+      }
+
+      .load-status {
+        min-height: 22px;
+      }
+
+      .decision-panel {
+        margin-top: 10px;
+        padding: 14px;
+        border-left: 4px solid var(--accent);
+      }
+
+      .decision-panel p { margin: 5px 0; }
+
+      .best-badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 999px;
+        color: #17623a;
+        background: #e4f6eb;
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+
+      button.primary {
+        color: #fff;
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      button.primary:hover { background: #1768b5; }
+      button:disabled { opacity: 0.55; cursor: wait; }
+
       pre {
         margin: 0;
         padding: 10px;
@@ -202,6 +265,7 @@
       @media (max-width: 1100px) {
         .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .mqtt-grid { grid-template-columns: 1fr; }
+        .variant-grid { grid-template-columns: 1fr; }
       }
 
       @media (max-width: 760px) {
@@ -240,6 +304,83 @@
         <div class="chart-card">
           <div class="chart-title">Logged — group-4 (4 sensors)</div>
           <canvas id="logged-4-canvas"></canvas>
+        </div>
+      </section>
+
+      <h2>Million-point Persistence Lab</h2>
+      <p class="status">Create the same deterministic MQTT sensor stream in three isolated table designs. One million points produces 100,000 raw message rows, 1,000,000 normalized sample rows, and 200,000 grouped-array rows. This does not change the live demo data above.</p>
+      <section class="panel controls">
+        <label>
+          Sensor data points
+          <input id="load-sample-count" type="number" value="1000000" min="10000" max="20000000" step="10000" />
+        </label>
+        <button id="seed-test-db" class="primary">Seed test DB</button>
+        <button id="benchmark-test-db">Run query comparison</button>
+        <button id="reset-test-db">Clear test DB</button>
+      </section>
+      <div id="load-test-status" class="status load-status">Checking the test database…</div>
+      <section id="decision-summary" class="panel decision-panel" aria-live="polite">
+        <div class="chart-title">How to choose</div>
+        <p>Seed the database to measure storage, then run the comparison to see which design fits each query workload.</p>
+      </section>
+      <section id="variant-cards" class="variant-grid">
+        <div class="chart-card metric-card" data-variant="raw">
+          <div class="chart-title">Raw MQTT JSONB</div>
+          <div class="metric-value">—</div>
+          <div class="metric-detail">One row per MQTT message; preserves the original payload.</div>
+          <div class="metric-fit">Best fit: exact payload replay, audits, and evolving message schemas.</div>
+        </div>
+        <div class="chart-card metric-card" data-variant="samples">
+          <div class="chart-title">Normalized samples</div>
+          <div class="metric-value">—</div>
+          <div class="metric-detail">One row per sensor reading; simplest indexed sensor queries.</div>
+          <div class="metric-fit">Best fit: independent sensor queries, relational joins, and per-reading constraints.</div>
+        </div>
+        <div class="chart-card metric-card" data-variant="arrays">
+          <div class="chart-title">Grouped arrays</div>
+          <div class="metric-value">—</div>
+          <div class="metric-detail">Two equipment-group rows per message; compact and compatible with the live demo.</div>
+          <div class="metric-fit">Best fit: fixed equipment groups, compact storage, and whole-group reads.</div>
+        </div>
+      </section>
+      <section class="chart-card" style="margin-top: 12px;">
+        <div class="chart-title">Storage and ingestion</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Variant</th>
+                <th>Stored rows</th>
+                <th>Rows / MQTT message</th>
+                <th>Table + indexes</th>
+                <th>Bytes / sensor point</th>
+                <th>Seed time</th>
+                <th>Seed throughput</th>
+              </tr>
+            </thead>
+            <tbody id="variant-results-body">
+              <tr><td colspan="7">Seed the test database to compare variants.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="chart-card" style="margin-top: 12px;">
+        <div class="chart-title">Query workloads · median of 3 warm runs</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Workload</th>
+                <th>Raw MQTT JSONB</th>
+                <th>Normalized samples</th>
+                <th>Grouped arrays</th>
+                <th>Measured winner</th>
+              </tr>
+            </thead>
+            <tbody id="workload-results-body">
+              <tr><td colspan="5">Run the query comparison after seeding.</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
